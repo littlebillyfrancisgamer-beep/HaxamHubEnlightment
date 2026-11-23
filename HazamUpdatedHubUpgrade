@@ -1,0 +1,3318 @@
+-- Wait for the game to load
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+local LogService = game:GetService("LogService")
+local HttpService = game:GetService("HttpService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
+local TextChatService = game:GetService("TextChatService")
+local Lighting = game:GetService("Lighting")
+local ProximityPromptService = game:GetService("ProximityPromptService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+
+local Player = Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
+
+-- Prevent duplicate GUI if run multiple times
+if PlayerGui:FindFirstChild("CustomExecutorGUI") then
+    PlayerGui.CustomExecutorGUI:Destroy()
+end
+
+-- Create ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "CustomExecutorGUI"
+ScreenGui.Parent = PlayerGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ResetOnSpawn = false
+
+-- Helper function to quickly add rounded corners
+local function AddCorner(parent, radius)
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = radius or UDim.new(0, 6)
+	corner.Parent = parent
+	return corner
+end
+
+-- Helper function to enable Mouse Wheel X-Axis Horizontal Scrolling
+local function EnableHorizontalMouseScroll(scrollingFrame)
+	scrollingFrame.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseWheel then
+			scrollingFrame.CanvasPosition = Vector2.new(
+				math.clamp(scrollingFrame.CanvasPosition.X - (input.Position.Z * 40), 0, math.max(0, scrollingFrame.AbsoluteCanvasSize.X - scrollingFrame.AbsoluteSize.X)),
+				scrollingFrame.CanvasPosition.Y
+			)
+		end
+	end)
+end
+
+-- Fullscreen Backdrop Overlay
+local Backdrop = Instance.new("Frame")
+Backdrop.Name = "Backdrop"
+Backdrop.Parent = ScreenGui
+Backdrop.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+Backdrop.BackgroundTransparency = 0.4 
+Backdrop.Size = UDim2.new(1, 0, 1, 0)
+Backdrop.Visible = false
+Backdrop.Active = false 
+Backdrop.ZIndex = 0
+
+-- Snow Particles Container inside Backdrop (Heavy Snow Blizzard Effect)
+local SnowContainer = Instance.new("Folder")
+SnowContainer.Name = "SnowContainer"
+SnowContainer.Parent = Backdrop
+
+-- Generate Heavy Snowflakes (120 snowflakes)
+local snowflakes = {}
+local rng = Random.new()
+
+for i = 1, 120 do
+	local flake = Instance.new("Frame")
+	flake.Name = "Snowflake"
+	flake.Parent = SnowContainer
+	flake.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	flake.BorderSizePixel = 0
+	
+	local size = rng:NextNumber(2, 6)
+	flake.Size = UDim2.new(0, size, 0, size)
+	AddCorner(flake, UDim.new(1, 0))
+	
+	local posX = rng:NextNumber(0, 1)
+	local posY = rng:NextNumber(-0.2, 1)
+	flake.Position = UDim2.new(posX, 0, posY, 0)
+	
+	table.insert(snowflakes, {
+		Object = flake,
+		Speed = rng:NextNumber(0.12, 0.35),
+		Drift = rng:NextNumber(-0.04, 0.04)
+	})
+end
+
+-- Snow animation loop
+local snowConnection
+snowConnection = RunService.RenderStepped:Connect(function(dt)
+	if not Backdrop.Visible then return end
+	for _, flakeData in ipairs(snowflakes) do
+		local flake = flakeData.Object
+		if flake and flake.Parent then
+			local pos = flake.Position
+			local newY = pos.Y.Scale + (flakeData.Speed * dt)
+			local newX = pos.X.Scale + (flakeData.Drift * dt * 0.2)
+			
+			if newY > 1.05 then
+				newY = -0.05
+				newX = rng:NextNumber(0, 1)
+			end
+			
+			if newX < 0 then newX = 1 elseif newX > 1 then newX = 0 end
+			flake.Position = UDim2.new(newX, 0, newY, 0)
+		end
+	end
+end)
+
+-- ==========================================
+-- 10-SECOND LOADING SCREEN GUI
+-- ==========================================
+local LoadingFrame = Instance.new("Frame")
+LoadingFrame.Name = "LoadingFrame"
+LoadingFrame.Parent = ScreenGui
+LoadingFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+LoadingFrame.BorderSizePixel = 0
+LoadingFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+LoadingFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+LoadingFrame.Size = UDim2.new(0, 380, 0, 180)
+LoadingFrame.ZIndex = 10
+AddCorner(LoadingFrame, UDim.new(0, 10))
+
+local LoadingTitle = Instance.new("TextLabel")
+LoadingTitle.Parent = LoadingFrame
+LoadingTitle.BackgroundTransparency = 1
+LoadingTitle.Position = UDim2.new(0, 0, 0.15, 0)
+LoadingTitle.Size = UDim2.new(1, 0, 0, 30)
+LoadingTitle.Font = Enum.Font.Arcade
+LoadingTitle.Text = "Hazem Executor v3"
+LoadingTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+LoadingTitle.TextSize = 18
+LoadingTitle.ZIndex = 11
+
+local LoadingSubtitle = Instance.new("TextLabel")
+LoadingSubtitle.Parent = LoadingFrame
+LoadingSubtitle.BackgroundTransparency = 1
+LoadingSubtitle.Position = UDim2.new(0, 0, 0.35, 0)
+LoadingSubtitle.Size = UDim2.new(1, 0, 0, 20)
+LoadingSubtitle.Font = Enum.Font.Arcade
+LoadingSubtitle.Text = "Loading system assets, please wait..."
+LoadingSubtitle.TextColor3 = Color3.fromRGB(170, 170, 170)
+LoadingSubtitle.TextSize = 13
+LoadingSubtitle.ZIndex = 11
+
+local BarBg = Instance.new("Frame")
+BarBg.Parent = LoadingFrame
+BarBg.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+BarBg.BorderSizePixel = 0
+BarBg.Position = UDim2.new(0.1, 0, 0.65, 0)
+BarBg.Size = UDim2.new(0.8, 0, 0, 12)
+BarBg.ZIndex = 11
+AddCorner(BarBg, UDim.new(1, 0))
+
+local BarFill = Instance.new("Frame")
+BarFill.Parent = BarBg
+BarFill.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+BarFill.BorderSizePixel = 0
+BarFill.Size = UDim2.new(0, 0, 1, 0)
+BarFill.ZIndex = 12
+AddCorner(BarFill, UDim.new(1, 0))
+
+local PercentLabel = Instance.new("TextLabel")
+PercentLabel.Parent = LoadingFrame
+PercentLabel.BackgroundTransparency = 1
+PercentLabel.Position = UDim2.new(0, 0, 0.82, 0)
+PercentLabel.Size = UDim2.new(1, 0, 0, 20)
+PercentLabel.Font = Enum.Font.Arcade
+PercentLabel.Text = "0%"
+PercentLabel.TextColor3 = Color3.fromRGB(0, 170, 255)
+PercentLabel.TextSize = 13
+PercentLabel.ZIndex = 11
+
+-- Main Executor Frame (Hidden initially)
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+MainFrame.BorderColor3 = Color3.fromRGB(60, 60, 60)
+MainFrame.BorderSizePixel = 0
+MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+MainFrame.Size = UDim2.new(0, 520, 0, 390)
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Visible = false
+MainFrame.ZIndex = 2
+MainFrame.BackgroundTransparency = 0
+AddCorner(MainFrame, UDim.new(0, 10))
+
+-- Floating Toggle Button (Hidden initially)
+local ToggleButton = Instance.new("ImageButton")
+ToggleButton.Name = "OpenCloseToggle"
+ToggleButton.Parent = ScreenGui
+ToggleButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+ToggleButton.BorderSizePixel = 0
+ToggleButton.Position = UDim2.new(0, 10, 0.5, -25)
+ToggleButton.Size = UDim2.new(0, 50, 0, 50)
+ToggleButton.Image = "rbxassetid://6031075931"
+ToggleButton.Draggable = true
+ToggleButton.Visible = false
+ToggleButton.ZIndex = 10
+AddCorner(ToggleButton, UDim.new(1, 0))
+
+-- UI Scale support
+local MainUIScale = Instance.new("UIScale")
+MainUIScale.Parent = MainFrame
+MainUIScale.Scale = 1
+
+-- Top Bar
+local TopBar = Instance.new("Frame")
+TopBar.Name = "TopBar"
+TopBar.Parent = MainFrame
+TopBar.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+TopBar.BorderSizePixel = 0
+TopBar.Size = UDim2.new(1, 0, 0, 32)
+TopBar.ZIndex = 2
+AddCorner(TopBar, UDim.new(0, 10))
+
+local TopBarCover = Instance.new("Frame")
+TopBarCover.Name = "TopBarCover"
+TopBarCover.Parent = TopBar
+TopBarCover.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+TopBarCover.BorderSizePixel = 0
+TopBarCover.Position = UDim2.new(0, 0, 1, -6)
+TopBarCover.Size = UDim2.new(1, 0, 0, 6)
+TopBarCover.ZIndex = 2
+
+-- Logo
+local Logo = Instance.new("ImageLabel")
+Logo.Name = "Logo"
+Logo.Parent = TopBar
+Logo.BackgroundTransparency = 1
+Logo.Position = UDim2.new(0, 6, 0.5, -11)
+Logo.Size = UDim2.new(0, 22, 0, 22)
+Logo.Image = "rbxassetid://6031075931" 
+Logo.ZIndex = 2
+
+-- Title
+local Title = Instance.new("TextLabel")
+Title.Name = "Title"
+Title.Parent = TopBar
+Title.BackgroundTransparency = 1
+Title.Position = UDim2.new(0, 34, 0, 0)
+Title.Size = UDim2.new(0, 420, 1, 0)
+Title.Font = Enum.Font.Arcade
+Title.Text = "Hazem Executor v3 | (Made By SorryGirls_Ilove)"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 11
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.ZIndex = 2
+
+-- Close Button
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Name = "CloseBtn"
+CloseBtn.Parent = TopBar
+CloseBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+CloseBtn.BorderSizePixel = 0
+CloseBtn.Position = UDim2.new(1, -28, 0, 5)
+CloseBtn.Size = UDim2.new(0, 22, 0, 22)
+CloseBtn.Font = Enum.Font.Arcade
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.TextSize = 14
+CloseBtn.ZIndex = 2
+AddCorner(CloseBtn, UDim.new(0, 6))
+
+-- Tab Bar Container
+local TabBar = Instance.new("ScrollingFrame")
+TabBar.Name = "TabBar"
+TabBar.Parent = MainFrame
+TabBar.BackgroundTransparency = 1
+TabBar.Position = UDim2.new(0, 0, 0, 32)
+TabBar.Size = UDim2.new(1, 0, 0, 28)
+TabBar.CanvasSize = UDim2.new(0, 750, 0, 0)
+TabBar.ScrollBarThickness = 0
+TabBar.ScrollingDirection = Enum.ScrollingDirection.X
+TabBar.ZIndex = 2
+EnableHorizontalMouseScroll(TabBar)
+
+local TabListLayout = Instance.new("UIListLayout")
+TabListLayout.Parent = TabBar
+TabListLayout.FillDirection = Enum.FillDirection.Horizontal
+TabListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+TabListLayout.Padding = UDim.new(0, 4)
+
+local function CreateTabButton(name, text)
+	local btn = Instance.new("TextButton")
+	btn.Name = name
+	btn.Parent = TabBar
+	btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	btn.BorderSizePixel = 0
+	btn.Size = UDim2.new(0, 72, 1, -4)
+	btn.Font = Enum.Font.Arcade
+	btn.Text = text
+	btn.TextColor3 = Color3.fromRGB(170, 170, 170)
+	btn.TextSize = 12
+	btn.ZIndex = 2
+	AddCorner(btn, UDim.new(0, 5))
+	return btn
+end
+
+local HubsTabBtn = CreateTabButton("HubsTabBtn", "Hubs")
+HubsTabBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+HubsTabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+local UniversalTabBtn = CreateTabButton("UniversalTabBtn", "Universal")
+local PlayersTabBtn = CreateTabButton("PlayersTabBtn", "Players")
+local EditorTabBtn = CreateTabButton("EditorTabBtn", "Editor")
+local FinderTabBtn = CreateTabButton("FinderTabBtn", "Finder")
+local CombinedTabBtn = CreateTabButton("CombinedTabBtn", "Spy/Con")
+local AddrsTabBtn = CreateTabButton("AddrsTabBtn", "+Addrs")
+local DexTabBtn = CreateTabButton("DexTabBtn", "Dex")
+local SettingsTabBtn = CreateTabButton("SettingsTabBtn", "Settings")
+
+-- Pages Container Creator
+local function CreatePage()
+	local page = Instance.new("Frame")
+	page.Parent = MainFrame
+	page.BackgroundTransparency = 1
+	page.Position = UDim2.new(0, 0, 0, 60)
+	page.Size = UDim2.new(1, 0, 1, -60)
+	page.Visible = false
+	page.ZIndex = 2
+	return page
+end
+
+local HubsPage = CreatePage(); HubsPage.Visible = true
+local UniversalPage = CreatePage()
+local PlayersPage = CreatePage()
+local EditorPage = CreatePage()
+local FinderPage = CreatePage()
+local CombinedPage = CreatePage()
+local AddrsPage = CreatePage()
+local DexPage = CreatePage()
+
+local SettingsPage = Instance.new("ScrollingFrame")
+SettingsPage.Name = "SettingsPage"
+SettingsPage.Parent = MainFrame
+SettingsPage.BackgroundTransparency = 1
+SettingsPage.Position = UDim2.new(0, 0, 0, 60)
+SettingsPage.Size = UDim2.new(1, 0, 1, -60)
+SettingsPage.Visible = false
+SettingsPage.CanvasSize = UDim2.new(0, 0, 0, 1500)
+SettingsPage.AutomaticCanvasSize = Enum.AutomaticSize.Y
+SettingsPage.ScrollBarThickness = 4
+SettingsPage.ZIndex = 2
+
+local SettingsListLayout = Instance.new("UIListLayout")
+SettingsListLayout.Parent = SettingsPage
+SettingsListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+SettingsListLayout.Padding = UDim.new(0, 12)
+SettingsListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+-- NOTIFICATION SYSTEM
+local function ShowNotification(textMsg)
+	pcall(function()
+		local Notif = Instance.new("Frame")
+		Notif.Name = "Notification"
+		Notif.Parent = ScreenGui
+		Notif.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+		Notif.BorderColor3 = Color3.fromRGB(0, 170, 255)
+		Notif.BorderSizePixel = 0
+		Notif.Position = UDim2.new(1, 10, 1, -70)
+		Notif.Size = UDim2.new(0, 250, 0, 50)
+		Notif.BackgroundTransparency = 0.1
+		Notif.ZIndex = 5
+		AddCorner(Notif, UDim.new(0, 8))
+
+		local NotifText = Instance.new("TextLabel")
+		NotifText.Parent = Notif
+		NotifText.BackgroundTransparency = 1
+		NotifText.Size = UDim2.new(1, 0, 1, 0)
+		NotifText.Font = Enum.Font.Arcade
+		NotifText.Text = textMsg
+		NotifText.TextColor3 = Color3.fromRGB(255, 255, 255)
+		NotifText.TextSize = 14
+		NotifText.ZIndex = 5
+
+		local slideIn = TweenService:Create(Notif, TweenInfo.new(0.4, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {
+			Position = UDim2.new(1, -260, 1, -70)
+		})
+		slideIn:Play()
+
+		task.delay(3, function()
+			pcall(function()
+				local slideOut = TweenService:Create(Notif, TweenInfo.new(0.4, Enum.EasingStyle.Exponential, Enum.EasingDirection.In), {
+					Position = UDim2.new(1, 10, 1, -70)
+				})
+				slideOut:Play()
+				slideOut.Completed:Connect(function() Notif:Destroy() end)
+			end)
+		end)
+	end)
+end
+
+-- SERVER-SIDE / GLOBAL BUBBLE CHAT TRIGGER ON LOAD
+local function TriggerGlobalChat()
+	pcall(function()
+		local msg = "Loaded Hazem Executor v3 (Made By SorryGirls_Ilove)"
+		
+		if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+			local channels = TextChatService:FindFirstChild("TextChannels")
+			if channels and channels:FindFirstChild("RBXGeneral") then
+				channels.RBXGeneral:SendAsync(msg)
+			end
+		else
+			local defaultChatSystemChatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+			if defaultChatSystemChatEvents then
+				local sayMessageRequest = defaultChatSystemChatEvents:FindFirstChild("SayMessageRequest")
+				if sayMessageRequest then
+					sayMessageRequest:FireServer(msg, "All")
+				end
+			end
+		end
+	end)
+end
+
+-- UNIVERSAL TAB IMPLEMENTATION
+local UniversalScroll = Instance.new("ScrollingFrame")
+UniversalScroll.Name = "UniversalScroll"
+UniversalScroll.Parent = UniversalPage
+UniversalScroll.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+UniversalScroll.BorderSizePixel = 0
+UniversalScroll.Position = UDim2.new(0.03, 0, 0.03, 0)
+UniversalScroll.Size = UDim2.new(0.94, 0, 0.92, 0)
+UniversalScroll.CanvasSize = UDim2.new(0, 0, 0, 480)
+UniversalScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+UniversalScroll.ScrollBarThickness = 4
+UniversalScroll.ZIndex = 2
+AddCorner(UniversalScroll, UDim.new(0, 6))
+
+local UniversalListLayout = Instance.new("UIListLayout")
+UniversalListLayout.Parent = UniversalScroll
+UniversalListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UniversalListLayout.Padding = UDim.new(0, 12)
+UniversalListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+-- Helper to create sliders
+local function CreateSlider(name, minVal, maxVal, defaultVal, callback)
+	local container = Instance.new("Frame")
+	container.Name = name .. "Container"
+	container.Parent = UniversalScroll
+	container.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+	container.BorderSizePixel = 0
+	container.Size = UDim2.new(0.92, 0, 0, 65)
+	container.ZIndex = 2
+	AddCorner(container, UDim.new(0, 6))
+
+	local titleLbl = Instance.new("TextLabel")
+	titleLbl.Parent = container
+	titleLbl.BackgroundTransparency = 1
+	titleLbl.Position = UDim2.new(0.03, 0, 0.1, 0)
+	titleLbl.Size = UDim2.new(0.7, 0, 0, 20)
+	titleLbl.Font = Enum.Font.Arcade
+	titleLbl.Text = name
+	titleLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+	titleLbl.TextSize = 14
+	titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+	titleLbl.ZIndex = 2
+
+	local valLbl = Instance.new("TextLabel")
+	valLbl.Parent = container
+	valLbl.BackgroundTransparency = 1
+	valLbl.Position = UDim2.new(0.7, 0, 0.1, 0)
+	valLbl.Size = UDim2.new(0.27, 0, 0, 20)
+	valLbl.Font = Enum.Font.Arcade
+	valLbl.Text = tostring(defaultVal)
+	valLbl.TextColor3 = Color3.fromRGB(0, 170, 255)
+	valLbl.TextSize = 14
+	valLbl.TextXAlignment = Enum.TextXAlignment.Right
+	valLbl.ZIndex = 2
+
+	local sliderBg = Instance.new("TextButton")
+	sliderBg.Name = "SliderBg"
+	sliderBg.Parent = container
+	sliderBg.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	sliderBg.BorderSizePixel = 0
+	sliderBg.Position = UDim2.new(0.03, 0, 0.6, 0)
+	sliderBg.Size = UDim2.new(0.94, 0, 0, 10)
+	sliderBg.AutoButtonColor = false
+	sliderBg.Text = ""
+	sliderBg.ZIndex = 2
+	AddCorner(sliderBg, UDim.new(1, 0))
+
+	local sliderFill = Instance.new("Frame")
+	sliderFill.Name = "SliderFill"
+	sliderFill.Parent = sliderBg
+	sliderFill.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+	sliderFill.BorderSizePixel = 0
+	sliderFill.Size = UDim2.new((defaultVal - minVal) / (maxVal - minVal), 0, 1, 0)
+	sliderFill.ZIndex = 2
+	AddCorner(sliderFill, UDim.new(1, 0))
+
+	local dragging = false
+	local function updateInput(input)
+		local pos = math.clamp((input.Position.X - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X, 0, 1)
+		local val = math.floor(minVal + ((maxVal - minVal) * pos) + 0.5)
+		sliderFill.Size = UDim2.new(pos, 0, 1, 0)
+		valLbl.Text = tostring(val)
+		callback(val)
+	end
+
+	sliderBg.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			updateInput(input)
+		end
+	end)
+
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			updateInput(input)
+		end
+	end)
+end
+
+-- ==========================================
+-- PLAYER HITBOX CUBE EXPANDER (1 to 100)
+-- ==========================================
+local hitboxSizeMultiplier = 1
+local hitboxEnabled = false
+
+CreateSlider("Hitbox Size", 1, 100, 1, function(val)
+	hitboxSizeMultiplier = val
+end)
+
+local hitboxToggleBtn = Instance.new("TextButton")
+hitboxToggleBtn.Parent = UniversalScroll
+hitboxToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+hitboxToggleBtn.BorderSizePixel = 0
+hitboxToggleBtn.Size = UDim2.new(0.92, 0, 0, 36)
+hitboxToggleBtn.Font = Enum.Font.Arcade
+hitboxToggleBtn.Text = "Hitbox Expander: OFF"
+hitboxToggleBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+hitboxToggleBtn.TextSize = 13
+hitboxToggleBtn.ZIndex = 2
+AddCorner(hitboxToggleBtn, UDim.new(0, 6))
+
+hitboxToggleBtn.MouseButton1Click:Connect(function()
+	hitboxEnabled = not hitboxEnabled
+	if hitboxEnabled then
+		hitboxToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		hitboxToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		hitboxToggleBtn.Text = "Hitbox Expander: ON"
+		ShowNotification("Hitbox Expander Enabled!")
+	else
+		hitboxToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		hitboxToggleBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+		hitboxToggleBtn.Text = "Hitbox Expander: OFF"
+		pcall(function()
+			for _, p in pairs(Players:GetPlayers()) do
+				if p ~= Player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+					local hrp = p.Character.HumanoidRootPart
+					hrp.Size = Vector3.new(2, 2, 1)
+					hrp.Transparency = 1
+				end
+			end
+		end)
+		ShowNotification("Hitbox Expander Disabled")
+	end
+end)
+
+RunService.RenderStepped:Connect(function()
+	if hitboxEnabled then
+		pcall(function()
+			for _, p in pairs(Players:GetPlayers()) do
+				if p ~= Player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+					local hrp = p.Character.HumanoidRootPart
+					-- True uniform cube dimensions (X, Y, Z equal)
+					local cubeSize = 2 * hitboxSizeMultiplier
+					hrp.Size = Vector3.new(cubeSize, cubeSize, cubeSize)
+					hrp.Transparency = 0.7
+					hrp.BrickColor = BrickColor.new("Really blue")
+					hrp.Material = Enum.Material.Neon
+				end
+			end
+		end)
+	end
+end)
+
+-- ==========================================
+-- NPC HITBOX CUBE EXPANDER (1 to 100)
+-- ==========================================
+local npcHitboxSizeMultiplier = 1
+local npcHitboxEnabled = false
+
+CreateSlider("NPC Hitbox Size", 1, 100, 1, function(val)
+	npcHitboxSizeMultiplier = val
+end)
+
+local npcHitboxToggleBtn = Instance.new("TextButton")
+npcHitboxToggleBtn.Parent = UniversalScroll
+npcHitboxToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+npcHitboxToggleBtn.BorderSizePixel = 0
+npcHitboxToggleBtn.Size = UDim2.new(0.92, 0, 0, 36)
+npcHitboxToggleBtn.Font = Enum.Font.Arcade
+npcHitboxToggleBtn.Text = "NPC Hitbox Expander: OFF"
+npcHitboxToggleBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+npcHitboxToggleBtn.TextSize = 13
+npcHitboxToggleBtn.ZIndex = 2
+AddCorner(npcHitboxToggleBtn, UDim.new(0, 6))
+
+npcHitboxToggleBtn.MouseButton1Click:Connect(function()
+	npcHitboxEnabled = not npcHitboxEnabled
+	if npcHitboxEnabled then
+		npcHitboxToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		npcHitboxToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		npcHitboxToggleBtn.Text = "NPC Hitbox Expander: ON"
+		ShowNotification("NPC Hitbox Expander Enabled!")
+	else
+		npcHitboxToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		npcHitboxToggleBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+		npcHitboxToggleBtn.Text = "NPC Hitbox Expander: OFF"
+		ShowNotification("NPC Hitbox Expander Disabled")
+	end
+end)
+
+RunService.RenderStepped:Connect(function()
+	if npcHitboxEnabled then
+		pcall(function()
+			for _, obj in pairs(workspace:GetDescendants()) do
+				if obj:IsA("Model") and obj:FindFirstChildOfClass("Humanoid") then
+					-- Check if model is not a player character
+					local isPlayer = false
+					for _, p in pairs(Players:GetPlayers()) do
+						if p.Character == obj then
+							isPlayer = true
+							break
+						end
+					end
+					
+					if not isPlayer and obj:FindFirstChild("HumanoidRootPart") then
+						local hrp = obj.HumanoidRootPart
+						local cubeSize = 2 * npcHitboxSizeMultiplier
+						hrp.Size = Vector3.new(cubeSize, cubeSize, cubeSize)
+						hrp.Transparency = 0.7
+						hrp.BrickColor = BrickColor.new("Really red")
+						hrp.Material = Enum.Material.Neon
+					end
+				end
+			end
+		end)
+	end
+end)
+
+-- 1. WalkSpeed Slider & Button (Max 500)
+local currentWalkSpeedValue = 16
+local walkSpeedEnabled = false
+
+CreateSlider("WalkSpeed", 1, 500, 16, function(val)
+	currentWalkSpeedValue = val
+	if walkSpeedEnabled then
+		pcall(function()
+			if Player.Character and Player.Character:FindFirstChildOfClass("Humanoid") then
+				Player.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = val
+			end
+		end)
+	end
+end)
+
+local walkSpeedToggleBtn = Instance.new("TextButton")
+walkSpeedToggleBtn.Parent = UniversalScroll
+walkSpeedToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+walkSpeedToggleBtn.BorderSizePixel = 0
+walkSpeedToggleBtn.Size = UDim2.new(0.92, 0, 0, 36)
+walkSpeedToggleBtn.Font = Enum.Font.Arcade
+walkSpeedToggleBtn.Text = "WalkSpeed Mod: OFF"
+walkSpeedToggleBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+walkSpeedToggleBtn.TextSize = 13
+walkSpeedToggleBtn.ZIndex = 2
+AddCorner(walkSpeedToggleBtn, UDim.new(0, 6))
+
+walkSpeedToggleBtn.MouseButton1Click:Connect(function()
+	walkSpeedEnabled = not walkSpeedEnabled
+	if walkSpeedEnabled then
+		walkSpeedToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		walkSpeedToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		walkSpeedToggleBtn.Text = "WalkSpeed Mod: ON"
+		ShowNotification("WalkSpeed Enabled!")
+	else
+		walkSpeedToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		walkSpeedToggleBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+		walkSpeedToggleBtn.Text = "WalkSpeed Mod: OFF"
+		pcall(function()
+			if Player.Character and Player.Character:FindFirstChildOfClass("Humanoid") then
+				Player.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = 16
+			end
+		end)
+		ShowNotification("WalkSpeed Disabled")
+	end
+end)
+
+RunService.RenderStepped:Connect(function()
+	if walkSpeedEnabled then
+		pcall(function()
+			if Player.Character and Player.Character:FindFirstChildOfClass("Humanoid") then
+				Player.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = currentWalkSpeedValue
+			end
+		end)
+	end
+end)
+
+-- 2. INFINITE JUMP TOGGLE
+local infJumpEnabled = false
+local infJumpBtn = Instance.new("TextButton")
+infJumpBtn.Parent = UniversalScroll
+infJumpBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+infJumpBtn.BorderSizePixel = 0
+infJumpBtn.Size = UDim2.new(0.92, 0, 0, 36)
+infJumpBtn.Font = Enum.Font.Arcade
+infJumpBtn.Text = "Infinite Jump: OFF"
+infJumpBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+infJumpBtn.TextSize = 13
+infJumpBtn.ZIndex = 2
+AddCorner(infJumpBtn, UDim.new(0, 6))
+
+infJumpBtn.MouseButton1Click:Connect(function()
+	infJumpEnabled = not infJumpEnabled
+	if infJumpEnabled then
+		infJumpBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		infJumpBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		infJumpBtn.Text = "Infinite Jump: ON"
+		ShowNotification("Infinite Jump Enabled!")
+	else
+		infJumpBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		infJumpBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+		infJumpBtn.Text = "Infinite Jump: OFF"
+		ShowNotification("Infinite Jump Disabled")
+	end
+end)
+
+UserInputService.JumpRequest:Connect(function()
+	if infJumpEnabled then
+		pcall(function()
+			local char = Player.Character
+			if char and char:FindFirstChildOfClass("Humanoid") then
+				char:FindFirstChildOfClass("Humanoid"):ChangeState(Enum.HumanoidStateType.Jumping)
+			end
+		end)
+	end
+end)
+
+-- 3. NOCLIP TOGGLE
+local noclipEnabled = false
+local noclipBtn = Instance.new("TextButton")
+noclipBtn.Parent = UniversalScroll
+noclipBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+noclipBtn.BorderSizePixel = 0
+noclipBtn.Size = UDim2.new(0.92, 0, 0, 36)
+noclipBtn.Font = Enum.Font.Arcade
+noclipBtn.Text = "Noclip: OFF"
+noclipBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+noclipBtn.TextSize = 13
+noclipBtn.ZIndex = 2
+AddCorner(noclipBtn, UDim.new(0, 6))
+
+noclipBtn.MouseButton1Click:Connect(function()
+	noclipEnabled = not noclipEnabled
+	if noclipEnabled then
+		noclipBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		noclipBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		noclipBtn.Text = "Noclip: ON"
+		ShowNotification("Noclip Enabled!")
+	else
+		noclipBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		noclipBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+		noclipBtn.Text = "Noclip: OFF"
+		ShowNotification("Noclip Disabled")
+	end
+end)
+
+RunService.Stepped:Connect(function()
+	if noclipEnabled then
+		pcall(function()
+			local char = Player.Character
+			if char then
+				for _, part in pairs(char:GetDescendants()) do
+					if part:IsA("BasePart") then
+						part.CanCollide = false
+					end
+				end
+			end
+		end)
+	end
+end)
+
+-- 4. TPWalk (Max 100)
+local tpWalkEnabled = false
+local tpWalkSpeed = 16
+
+local tpWalkToggleBtn = Instance.new("TextButton")
+tpWalkToggleBtn.Parent = UniversalScroll
+tpWalkToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+tpWalkToggleBtn.BorderSizePixel = 0
+tpWalkToggleBtn.Size = UDim2.new(0.92, 0, 0, 36)
+tpWalkToggleBtn.Font = Enum.Font.Arcade
+tpWalkToggleBtn.Text = "TPWalk: OFF"
+tpWalkToggleBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+tpWalkToggleBtn.TextSize = 13
+tpWalkToggleBtn.ZIndex = 2
+AddCorner(tpWalkToggleBtn, UDim.new(0, 6))
+
+CreateSlider("TPWalk Speed", 1, 100, 16, function(val)
+	tpWalkSpeed = val
+end)
+
+tpWalkToggleBtn.MouseButton1Click:Connect(function()
+	tpWalkEnabled = not tpWalkEnabled
+	if tpWalkEnabled then
+		tpWalkToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		tpWalkToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		tpWalkToggleBtn.Text = "TPWalk: ON"
+		ShowNotification("TPWalk Enabled!")
+	else
+		tpWalkToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		tpWalkToggleBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+		tpWalkToggleBtn.Text = "TPWalk: OFF"
+		ShowNotification("TPWalk Disabled")
+	end
+end)
+
+RunService.RenderStepped:Connect(function(dt)
+	if tpWalkEnabled then
+		pcall(function()
+			local char = Player.Character
+			if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChildOfClass("Humanoid") then
+				local humanoid = char:FindFirstChildOfClass("Humanoid")
+				local hrp = char.HumanoidRootPart
+				if humanoid.MoveDirection.Magnitude > 0 then
+					hrp.CFrame = hrp.CFrame + (humanoid.MoveDirection * (tpWalkSpeed * dt * 5))
+				end
+			end
+		end)
+	end
+end)
+
+-- 5. Body ESP (Chams / Highlight) in Universal tab
+local bodyEspEnabled = false
+local bodyEspToggleBtn = Instance.new("TextButton")
+bodyEspToggleBtn.Parent = UniversalScroll
+bodyEspToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+bodyEspToggleBtn.BorderSizePixel = 0
+bodyEspToggleBtn.Size = UDim2.new(0.92, 0, 0, 36)
+bodyEspToggleBtn.Font = Enum.Font.Arcade
+bodyEspToggleBtn.Text = "Body ESP (Chams): OFF"
+bodyEspToggleBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+bodyEspToggleBtn.TextSize = 13
+bodyEspToggleBtn.ZIndex = 2
+AddCorner(bodyEspToggleBtn, UDim.new(0, 6))
+
+local highlightsFolder = Instance.new("Folder")
+highlightsFolder.Name = "BodyESPFolder"
+highlightsFolder.Parent = ScreenGui
+
+bodyEspToggleBtn.MouseButton1Click:Connect(function()
+	bodyEspEnabled = not bodyEspEnabled
+	if bodyEspEnabled then
+		bodyEspToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		bodyEspToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		bodyEspToggleBtn.Text = "Body ESP (Chams): ON"
+		ShowNotification("Body ESP Enabled!")
+	else
+		bodyEspToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		bodyEspToggleBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+		bodyEspToggleBtn.Text = "Body ESP (Chams): OFF"
+		for _, v in pairs(highlightsFolder:GetChildren()) do v:Destroy() end
+		ShowNotification("Body ESP Disabled")
+	end
+end)
+
+RunService.RenderStepped:Connect(function()
+	if bodyEspEnabled then
+		pcall(function()
+			for _, p in pairs(Players:GetPlayers()) do
+				if p ~= Player and p.Character then
+					local hlName = "Highlight_" .. p.Name
+					local hl = highlightsFolder:FindFirstChild(hlName)
+					if not hl then
+						hl = Instance.new("Highlight")
+						hl.Name = hlName
+						hl.FillColor = Color3.fromRGB(0, 170, 255)
+						hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+						hl.FillTransparency = 0.5
+						hl.Parent = highlightsFolder
+					end
+					hl.Adornee = p.Character
+				end
+			end
+		end)
+	else
+		for _, v in pairs(highlightsFolder:GetChildren()) do v:Destroy() end
+	end
+end)
+
+-- PLAYERS PAGE UI
+local PlayersScroll = Instance.new("ScrollingFrame")
+PlayersScroll.Name = "PlayersScroll"
+PlayersScroll.Parent = PlayersPage
+PlayersScroll.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+PlayersScroll.BorderSizePixel = 0
+PlayersScroll.Position = UDim2.new(0.03, 0, 0.03, 0)
+PlayersScroll.Size = UDim2.new(0.94, 0, 0.92, 0)
+PlayersScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+PlayersScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+PlayersScroll.ScrollBarThickness = 6
+PlayersScroll.ZIndex = 2
+AddCorner(PlayersScroll, UDim.new(0, 6))
+
+local PlayersListLayout = Instance.new("UIListLayout")
+PlayersListLayout.Parent = PlayersScroll
+PlayersListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+PlayersListLayout.Padding = UDim.new(0, 6)
+
+local ExtraEspControlsContainer = Instance.new("Frame")
+ExtraEspControlsContainer.Parent = PlayersScroll
+ExtraEspControlsContainer.BackgroundTransparency = 1
+ExtraEspControlsContainer.Size = UDim2.new(1, 0, 0, 80)
+ExtraEspControlsContainer.ZIndex = 2
+
+local ExtraEspRow1 = Instance.new("Frame")
+ExtraEspRow1.Parent = ExtraEspControlsContainer
+ExtraEspRow1.BackgroundTransparency = 1
+ExtraEspRow1.Size = UDim2.new(1, 0, 0, 36)
+ExtraEspRow1.ZIndex = 2
+
+local titleEspGlobalToggle = false
+local titleEspBtn = Instance.new("TextButton")
+titleEspBtn.Parent = ExtraEspRow1
+titleEspBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+titleEspBtn.BorderSizePixel = 0
+titleEspBtn.Position = UDim2.new(0, 0, 0, 0)
+titleEspBtn.Size = UDim2.new(0.48, 0, 1, 0)
+titleEspBtn.Font = Enum.Font.Arcade
+titleEspBtn.Text = "Title ESP: OFF"
+titleEspBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+titleEspBtn.TextSize = 12
+titleEspBtn.ZIndex = 2
+AddCorner(titleEspBtn, UDim.new(0, 6))
+
+titleEspBtn.MouseButton1Click:Connect(function()
+	titleEspGlobalToggle = not titleEspGlobalToggle
+	if titleEspGlobalToggle then
+		titleEspBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		titleEspBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		titleEspBtn.Text = "Title ESP: ON"
+		ShowNotification("Title ESP Enabled!")
+	else
+		titleEspBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		titleEspBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+		titleEspBtn.Text = "Title ESP: OFF"
+		ShowNotification("Title ESP Disabled")
+	end
+end)
+
+local tracerEspGlobalToggle = false
+local tracerEspBtn = Instance.new("TextButton")
+tracerEspBtn.Parent = ExtraEspRow1
+tracerEspBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+tracerEspBtn.BorderSizePixel = 0
+tracerEspBtn.Position = UDim2.new(0.52, 0, 0, 0)
+tracerEspBtn.Size = UDim2.new(0.48, 0, 1, 0)
+tracerEspBtn.Font = Enum.Font.Arcade
+tracerEspBtn.Text = "Tracer ESP: OFF"
+tracerEspBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+tracerEspBtn.TextSize = 12
+tracerEspBtn.ZIndex = 2
+AddCorner(tracerEspBtn, UDim.new(0, 6))
+
+tracerEspBtn.MouseButton1Click:Connect(function()
+	tracerEspGlobalToggle = not tracerEspGlobalToggle
+	if tracerEspGlobalToggle then
+		tracerEspBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		tracerEspBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		tracerEspBtn.Text = "Tracer ESP: ON"
+		ShowNotification("Tracer ESP Enabled!")
+	else
+		tracerEspBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		tracerEspBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+		tracerEspBtn.Text = "Tracer ESP: OFF"
+		ShowNotification("Tracer ESP Disabled")
+	end
+end)
+
+local ExtraEspRow2 = Instance.new("Frame")
+ExtraEspRow2.Parent = ExtraEspControlsContainer
+ExtraEspRow2.BackgroundTransparency = 1
+ExtraEspRow2.Position = UDim2.new(0, 0, 0, 42)
+ExtraEspRow2.Size = UDim2.new(1, 0, 0, 36)
+ExtraEspRow2.ZIndex = 2
+
+local scanPlayersEnabled = false
+local scanPlayersBtn = Instance.new("TextButton")
+scanPlayersBtn.Parent = ExtraEspRow2
+scanPlayersBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+scanPlayersBtn.BorderSizePixel = 0
+scanPlayersBtn.Position = UDim2.new(0, 0, 0, 0)
+scanPlayersBtn.Size = UDim2.new(0.48, 0, 1, 0)
+scanPlayersBtn.Font = Enum.Font.Arcade
+scanPlayersBtn.Text = "Scan Players: OFF"
+scanPlayersBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+scanPlayersBtn.TextSize = 12
+scanPlayersBtn.ZIndex = 2
+AddCorner(scanPlayersBtn, UDim.new(0, 6))
+
+local scanStatusLabel = Instance.new("TextLabel")
+scanStatusLabel.Parent = ExtraEspRow2
+scanStatusLabel.BackgroundTransparency = 1
+scanStatusLabel.Position = UDim2.new(0.52, 0, 0, 0)
+scanStatusLabel.Size = UDim2.new(0.48, 0, 1, 0)
+scanStatusLabel.Font = Enum.Font.Arcade
+scanStatusLabel.Text = "Status: Idle"
+scanStatusLabel.TextColor3 = Color3.fromRGB(170, 170, 170)
+scanStatusLabel.TextSize = 11
+scanStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+scanStatusLabel.ZIndex = 2
+
+scanPlayersBtn.MouseButton1Click:Connect(function()
+	scanPlayersEnabled = not scanPlayersEnabled
+	if scanPlayersEnabled then
+		scanPlayersBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		scanPlayersBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		scanPlayersBtn.Text = "Scan Players: ON"
+		ShowNotification("Sequential Player Scanner Started!")
+	else
+		scanPlayersBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		scanPlayersBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+		scanPlayersBtn.Text = "Scan Players: OFF"
+		scanStatusLabel.Text = "Status: Idle"
+		scanStatusLabel.TextColor3 = Color3.fromRGB(170, 170, 170)
+		ShowNotification("Sequential Player Scanner Stopped")
+	end
+end)
+
+task.spawn(function()
+	while true do
+		if scanPlayersEnabled then
+			local playerList = Players:GetPlayers()
+			for _, p in ipairs(playerList) do
+				if not scanPlayersEnabled then break end
+				if p ~= Player then
+					pcall(function()
+						scanStatusLabel.Text = "Scanning: " .. p.Name
+						scanStatusLabel.TextColor3 = Color3.fromRGB(80, 255, 120)
+						
+						if p.Character then
+							local tempHl = p.Character:FindFirstChild("ScanHighlightTemp")
+							if not tempHl then
+								tempHl = Instance.new("Highlight")
+								tempHl.Name = "ScanHighlightTemp"
+								tempHl.FillColor = Color3.fromRGB(255, 200, 0)
+								tempHl.OutlineColor = Color3.fromRGB(255, 255, 255)
+								tempHl.FillTransparency = 0.3
+								tempHl.Parent = p.Character
+							end
+							task.delay(0.6, function()
+								if tempHl then tempHl:Destroy() end
+							end)
+						end
+					end)
+					task.wait(0.6)
+				end
+			end
+			if scanPlayersEnabled then
+				scanStatusLabel.Text = "Refreshing loop..."
+				scanStatusLabel.TextColor3 = Color3.fromRGB(0, 170, 255)
+				task.wait(0.5)
+			end
+		else
+			task.wait(0.5)
+		end
+	end
+end)
+
+local titleEspFolder = Instance.new("Folder")
+titleEspFolder.Name = "TitleESPFolder"
+titleEspFolder.Parent = ScreenGui
+
+RunService.RenderStepped:Connect(function()
+	if titleEspGlobalToggle then
+		pcall(function()
+			for _, p in pairs(Players:GetPlayers()) do
+				if p ~= Player and p.Character and p.Character:FindFirstChild("Head") then
+					local head = p.Character.Head
+					local bbName = "TitleESP_" .. p.Name
+					local bb = titleEspFolder:FindFirstChild(bbName)
+					if not bb then
+						bb = Instance.new("BillboardGui")
+						bb.Name = bbName
+						bb.Size = UDim2.new(0, 200, 0, 50)
+						bb.StudsOffset = Vector3.new(0, 2.5, 0)
+						bb.AlwaysOnTop = true
+						bb.Parent = titleEspFolder
+
+						local lbl = Instance.new("TextLabel")
+						lbl.Name = "Label"
+						lbl.Size = UDim2.new(1, 0, 1, 0)
+						lbl.BackgroundTransparency = 1
+						lbl.Font = Enum.Font.Arcade
+						lbl.TextSize = 13
+						lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+						lbl.TextStrokeTransparency = 0.5
+						lbl.Parent = bb
+					end
+					bb.Adornee = head
+					local lbl = bb:FindFirstChild("Label")
+					if lbl and p.Character:FindFirstChild("HumanoidRootPart") and Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
+						local dist = math.floor((p.Character.HumanoidRootPart.Position - Player.Character.HumanoidRootPart.Position).Magnitude)
+						lbl.Text = string.format("%s (@%s)\n[%dm]", p.DisplayName, p.Name, dist)
+					end
+				else
+					local bbName = "TitleESP_" .. p.Name
+					local bb = titleEspFolder:FindFirstChild(bbName)
+					if bb then bb:Destroy() end
+				end
+			end
+		end)
+	else
+		for _, v in pairs(titleEspFolder:GetChildren()) do v:Destroy() end
+	end
+end)
+
+local tracersFolder = Instance.new("Folder")
+tracersFolder.Name = "TracersFolder"
+tracersFolder.Parent = ScreenGui
+
+RunService.RenderStepped:Connect(function()
+	if tracerEspGlobalToggle then
+		pcall(function()
+			for _, p in pairs(Players:GetPlayers()) do
+				if p ~= Player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+					local hrp = p.Character.HumanoidRootPart
+					local tracerName = "Tracer_" .. p.Name
+					local lineFrame = tracersFolder:FindFirstChild(tracerName)
+					
+					if not lineFrame then
+						lineFrame = Instance.new("Frame")
+						lineFrame.Name = tracerName
+						lineFrame.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+						lineFrame.BorderSizePixel = 0
+						lineFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+						lineFrame.Parent = tracersFolder
+					end
+
+					local vector, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+					if onScreen then
+						local screenCenterBottom = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+						local targetPos = Vector2.new(vector.X, vector.Y)
+						local distance = (screenCenterBottom - targetPos).Magnitude
+						
+						lineFrame.Size = UDim2.new(0, 2, 0, distance)
+						lineFrame.Position = UDim2.new(0, (screenCenterBottom.X + targetPos.X) / 2, 0, (screenCenterBottom.Y + targetPos.Y) / 2)
+						lineFrame.Rotation = math.deg(math.atan2(targetPos.Y - screenCenterBottom.Y, targetPos.X - screenCenterBottom.X)) - 90
+						lineFrame.Visible = true
+					else
+						lineFrame.Visible = false
+					end
+				else
+					local tracerName = "Tracer_" .. p.Name
+					local lineFrame = tracersFolder:FindFirstChild(tracerName)
+					if lineFrame then lineFrame.Visible = false end
+				end
+			end
+		end)
+	else
+		for _, v in pairs(tracersFolder:GetChildren()) do v.Visible = false end
+	end
+end)
+
+local function BuildPlayerList()
+	for _, child in ipairs(PlayersScroll:GetChildren()) do
+		if child:IsA("Frame") and child ~= ExtraEspControlsContainer then child:Destroy() end
+	end
+
+	for _, p in ipairs(Players:GetPlayers()) do
+		local pCard = Instance.new("Frame")
+		pCard.Name = "PlayerCard_" .. p.Name
+		pCard.Parent = PlayersScroll
+		pCard.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+		pCard.BorderSizePixel = 0
+		pCard.Size = UDim2.new(1, 0, 0, 55)
+		pCard.ZIndex = 2
+		AddCorner(pCard, UDim.new(0, 6))
+
+		local avatarIcon = Instance.new("ImageLabel")
+		avatarIcon.Name = "Avatar"
+		avatarIcon.Parent = pCard
+		avatarIcon.BackgroundTransparency = 1
+		avatarIcon.Position = UDim2.new(0.02, 0, 0.12, 0)
+		avatarIcon.Size = UDim2.new(0, 40, 0, 40)
+		avatarIcon.ZIndex = 2
+		AddCorner(avatarIcon, UDim.new(1, 0))
+		
+		pcall(function()
+			avatarIcon.Image = Players:GetUserThumbnailAsync(p.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size42x42)
+		end)
+
+		local nameLabel = Instance.new("TextLabel")
+		nameLabel.Name = "NameLabel"
+		nameLabel.Parent = pCard
+		nameLabel.BackgroundTransparency = 1
+		nameLabel.Position = UDim2.new(0.13, 0, 0.1, 0)
+		nameLabel.Size = UDim2.new(0.45, 0, 0, 20)
+		nameLabel.Font = Enum.Font.Arcade
+		nameLabel.Text = p.DisplayName .. " (@" .. p.Name .. ")"
+		nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+		nameLabel.TextSize = 13
+		nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+		nameLabel.ZIndex = 2
+
+		local infoLabel = Instance.new("TextLabel")
+		infoLabel.Name = "InfoLabel"
+		infoLabel.Parent = pCard
+		infoLabel.BackgroundTransparency = 1
+		infoLabel.Position = UDim2.new(0.13, 0, 0.45, 0)
+		infoLabel.Size = UDim2.new(0.45, 0, 0, 16)
+		infoLabel.Font = Enum.Font.Arcade
+		infoLabel.Text = "Distance: calculating... | HP: 100"
+		infoLabel.TextColor3 = Color3.fromRGB(170, 170, 170)
+		infoLabel.TextSize = 11
+		infoLabel.TextXAlignment = Enum.TextXAlignment.Left
+		infoLabel.ZIndex = 2
+
+		local hpBarBg = Instance.new("Frame")
+		hpBarBg.Name = "HpBarBg"
+		hpBarBg.Parent = pCard
+		hpBarBg.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		hpBarBg.BorderSizePixel = 0
+		hpBarBg.Position = UDim2.new(0.13, 0, 0.72, 0)
+		hpBarBg.Size = UDim2.new(0.45, 0, 0, 6)
+		hpBarBg.ZIndex = 2
+		AddCorner(hpBarBg, UDim.new(1, 0))
+
+		local hpBarFill = Instance.new("Frame")
+		hpBarFill.Name = "HpBarFill"
+		hpBarFill.Parent = hpBarBg
+		hpBarFill.BackgroundColor3 = Color3.fromRGB(80, 255, 120)
+		hpBarFill.BorderSizePixel = 0
+		hpBarFill.Size = UDim2.new(1, 0, 1, 0)
+		hpBarFill.ZIndex = 2
+		AddCorner(hpBarFill, UDim.new(1, 0))
+
+		local tpBtn = Instance.new("TextButton")
+		tpBtn.Name = "TpBtn"
+		tpBtn.Parent = pCard
+		tpBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		tpBtn.BorderSizePixel = 0
+		tpBtn.Position = UDim2.new(0.59, 0, 0.08, 0)
+		tpBtn.Size = UDim2.new(0.38, 0, 0, 21)
+		tpBtn.Font = Enum.Font.Arcade
+		tpBtn.Text = "Teleport"
+		tpBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		tpBtn.TextSize = 12
+		tpBtn.ZIndex = 2
+		AddCorner(tpBtn, UDim.new(0, 5))
+
+		tpBtn.MouseButton1Click:Connect(function()
+			pcall(function()
+				if p.Character and p.Character:FindFirstChild("HumanoidRootPart") and Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
+					Player.Character.HumanoidRootPart.CFrame = p.Character.HumanoidRootPart.CFrame + Vector3.new(0, 3, 0)
+					ShowNotification("Teleported to " .. p.DisplayName)
+				else
+					ShowNotification("Cannot teleport (Player dead/missing)")
+				end
+			end)
+		end)
+
+		local copyUserBtn = Instance.new("TextButton")
+		copyUserBtn.Name = "CopyUserBtn"
+		copyUserBtn.Parent = pCard
+		copyUserBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		copyUserBtn.BorderSizePixel = 0
+		copyUserBtn.Position = UDim2.new(0.59, 0, 0.54, 0)
+		copyUserBtn.Size = UDim2.new(0.18, 0, 0, 20)
+		copyUserBtn.Font = Enum.Font.Arcade
+		copyUserBtn.Text = "Copy @"
+		copyUserBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		copyUserBtn.TextSize = 11
+		copyUserBtn.ZIndex = 2
+		AddCorner(copyUserBtn, UDim.new(0, 5))
+
+		copyUserBtn.MouseButton1Click:Connect(function()
+			pcall(function()
+				if setclipboard then setclipboard(p.Name) end
+				ShowNotification("Copied Username: " .. p.Name)
+			end)
+		end)
+
+		local copyDisplayBtn = Instance.new("TextButton")
+		copyDisplayBtn.Name = "CopyDisplayBtn"
+		copyDisplayBtn.Parent = pCard
+		copyDisplayBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		copyDisplayBtn.BorderSizePixel = 0
+		copyDisplayBtn.Position = UDim2.new(0.79, 0, 0.54, 0)
+		copyDisplayBtn.Size = UDim2.new(0.18, 0, 0, 20)
+		copyDisplayBtn.Font = Enum.Font.Arcade
+		copyDisplayBtn.Text = "Copy Disp"
+		copyDisplayBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		copyDisplayBtn.TextSize = 11
+		copyDisplayBtn.ZIndex = 2
+		AddCorner(copyDisplayBtn, UDim.new(0, 5))
+
+		copyDisplayBtn.MouseButton1Click:Connect(function()
+			pcall(function()
+				if setclipboard then setclipboard(p.DisplayName) end
+				ShowNotification("Copied Display Name: " .. p.DisplayName)
+			end)
+		end)
+
+		task.spawn(function()
+			while pCard and pCard.Parent do
+				pcall(function()
+					local char = p.Character
+					local myChar = Player.Character
+					if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChildOfClass("Humanoid") then
+						local humanoid = char:FindFirstChildOfClass("Humanoid")
+						local hp = math.floor(humanoid.Health)
+						local maxHp = math.floor(humanoid.MaxHealth)
+						if maxHp <= 0 then maxHp = 100 end
+						
+						local hpPercent = math.clamp(hp / maxHp, 0, 1)
+						hpBarFill.Size = UDim2.new(hpPercent, 0, 1, 0)
+						
+						if hpPercent > 0.5 then
+							hpBarFill.BackgroundColor3 = Color3.fromRGB(80, 255, 120)
+						elseif hpPercent > 0.25 then
+							hpBarFill.BackgroundColor3 = Color3.fromRGB(255, 220, 50)
+						else
+							hpBarFill.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+						end
+
+						if myChar and myChar:FindFirstChild("HumanoidRootPart") then
+							local dist = math.floor((char.HumanoidRootPart.Position - myChar.HumanoidRootPart.Position).Magnitude)
+							infoLabel.Text = string.format("Dist: %dm | HP: %d/%d", dist, hp, maxHp)
+						else
+							infoLabel.Text = string.format("HP: %d/%d", hp, maxHp)
+						end
+					else
+						infoLabel.Text = "Status: Not Spawned / Dead"
+						hpBarFill.Size = UDim2.new(0, 0, 1, 0)
+					end
+				end)
+				task.wait(0.5)
+			end
+		end)
+	end
+end
+
+Players.PlayerAdded:Connect(BuildPlayerList)
+Players.PlayerRemoving:Connect(BuildPlayerList)
+
+-- HUBS PAGE
+local function CreateButton(name, position, size, text)
+	local btn = Instance.new("TextButton")
+	btn.Name = name
+	btn.Parent = HubsPage
+	btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	btn.BorderColor3 = Color3.fromRGB(80, 80, 80)
+	btn.BorderSizePixel = 0
+	btn.Position = position
+	btn.Size = size
+	btn.Font = Enum.Font.Arcade
+	btn.Text = text
+	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btn.TextSize = 14
+	btn.ZIndex = 2
+	AddCorner(btn, UDim.new(0, 6))
+	
+	btn.MouseEnter:Connect(function()
+		TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(70, 70, 70)}):Play()
+	end)
+	btn.MouseLeave:Connect(function()
+		TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(50, 50, 50)}):Play()
+	end)
+	
+	return btn
+end
+
+local WaveBtn = CreateButton("WaveBtn", UDim2.new(0.1, 0, 0.05, 0), UDim2.new(0.8, 0, 0, 36), "Execute Wave Executor")
+local AimbotBtn = CreateButton("AimbotBtn", UDim2.new(0.1, 0, 0.20, 0), UDim2.new(0.8, 0, 0, 36), "Execute Aimbot X Hub")
+local FlingerBtn = CreateButton("FlingerBtn", UDim2.new(0.1, 0, 0.35, 0), UDim2.new(0.8, 0, 0, 36), "Execute Flinger Hub")
+local RidePetBtn = CreateButton("RidePetBtn", UDim2.new(0.1, 0, 0.50, 0), UDim2.new(0.8, 0, 0, 36), "Execute Ride a Pet script")
+local RejoinBtn = CreateButton("RejoinBtn", UDim2.new(0.1, 0, 0.65, 0), UDim2.new(0.8, 0, 0, 36), "Rejoin Server")
+
+local LeaveBtn = Instance.new("TextButton")
+LeaveBtn.Name = "LeaveBtn"
+LeaveBtn.Parent = HubsPage
+LeaveBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+LeaveBtn.BorderSizePixel = 0
+LeaveBtn.Position = UDim2.new(0.1, 0, 0.80, 0)
+LeaveBtn.Size = UDim2.new(0.8, 0, 0, 36)
+LeaveBtn.Font = Enum.Font.Arcade
+LeaveBtn.Text = "" 
+LeaveBtn.ZIndex = 2
+AddCorner(LeaveBtn, UDim.new(0, 6))
+
+local LeaveIcon = Instance.new("ImageLabel")
+LeaveIcon.Name = "LeaveIcon"
+LeaveIcon.Parent = LeaveBtn
+LeaveIcon.BackgroundTransparency = 1
+LeaveIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+LeaveIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+LeaveIcon.Size = UDim2.new(0, 18, 0, 18)
+LeaveIcon.Image = "rbxassetid://6023426915"
+LeaveIcon.ZIndex = 2
+
+-- EDITOR PAGE & TABS
+local EditorTabBar = Instance.new("ScrollingFrame")
+EditorTabBar.Name = "EditorTabBar"
+EditorTabBar.Parent = EditorPage
+EditorTabBar.BackgroundTransparency = 1
+EditorTabBar.Position = UDim2.new(0.03, 0, 0.01, 0)
+EditorTabBar.Size = UDim2.new(0.94, 0, 0, 26)
+EditorTabBar.CanvasSize = UDim2.new(0, 0, 0, 0)
+EditorTabBar.AutomaticCanvasSize = Enum.AutomaticSize.X
+EditorTabBar.ScrollBarThickness = 0
+EditorTabBar.ScrollingDirection = Enum.ScrollingDirection.X
+EditorTabBar.ZIndex = 2
+EnableHorizontalMouseScroll(EditorTabBar)
+
+local EditorTabLayout = Instance.new("UIListLayout")
+EditorTabLayout.Parent = EditorTabBar
+EditorTabLayout.FillDirection = Enum.FillDirection.Horizontal
+EditorTabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+EditorTabLayout.Padding = UDim.new(0, 4)
+
+local EditorScroll = Instance.new("ScrollingFrame")
+EditorScroll.Name = "EditorScroll"
+EditorScroll.Parent = EditorPage
+EditorScroll.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+EditorScroll.BorderColor3 = Color3.fromRGB(60, 60, 60)
+EditorScroll.BorderSizePixel = 0
+EditorScroll.Position = UDim2.new(0.03, 0, 0.09, 0)
+EditorScroll.Size = UDim2.new(0.94, 0, 0.76, 0)
+EditorScroll.CanvasSize = UDim2.new(0, 1500, 0, 1000)
+EditorScroll.AutomaticCanvasSize = Enum.AutomaticSize.None
+EditorScroll.ScrollBarThickness = 6
+EditorScroll.ScrollingDirection = Enum.ScrollingDirection.XY
+EditorScroll.ZIndex = 2
+AddCorner(EditorScroll, UDim.new(0, 6))
+
+local LineNumbers = Instance.new("TextLabel")
+LineNumbers.Name = "LineNumbers"
+LineNumbers.Parent = EditorScroll
+LineNumbers.BackgroundTransparency = 1
+LineNumbers.Position = UDim2.new(0, 0, 0, 0)
+LineNumbers.Size = UDim2.new(0, 35, 0, 1000)
+LineNumbers.Font = Enum.Font.Arcade
+LineNumbers.Text = "1."
+LineNumbers.TextColor3 = Color3.fromRGB(110, 110, 110)
+LineNumbers.TextSize = 12
+LineNumbers.TextXAlignment = Enum.TextXAlignment.Center
+LineNumbers.TextYAlignment = Enum.TextYAlignment.Top
+LineNumbers.ZIndex = 2
+
+local ScriptBox = Instance.new("TextBox")
+ScriptBox.Name = "ScriptBox"
+ScriptBox.Parent = EditorScroll
+ScriptBox.BackgroundTransparency = 1
+ScriptBox.Position = UDim2.new(0, 40, 0, 0)
+ScriptBox.Size = UDim2.new(0, 1460, 0, 1000)
+ScriptBox.Font = Enum.Font.Arcade
+ScriptBox.MultiLine = true
+ScriptBox.ClearTextOnFocus = false
+ScriptBox.PlaceholderText = "-- Type or paste your Lua script / loadstring here..."
+ScriptBox.Text = ""
+ScriptBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+ScriptBox.TextSize = 12
+ScriptBox.TextXAlignment = Enum.TextXAlignment.Left
+ScriptBox.TextYAlignment = Enum.TextYAlignment.Top
+ScriptBox.ZIndex = 2
+
+local editorTabs = {}
+local activeTabId = nil
+local ExecuteCodeString
+local SwitchTab
+
+local SwitchEditorTab = function(tabId)
+	if activeTabId and editorTabs[activeTabId] then
+		editorTabs[activeTabId].Content = ScriptBox.Text
+		editorTabs[activeTabId].Button.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+		editorTabs[activeTabId].Button.TextColor3 = Color3.fromRGB(170, 170, 170)
+	end
+	
+	activeTabId = tabId
+	local tabData = editorTabs[tabId]
+	if tabData then
+		ScriptBox.Text = tabData.Content
+		tabData.Button.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		tabData.Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+	end
+end
+
+local function CreateNewEditorTab(customTitle, initialContent)
+	local tabId = tostring(math.random(10000, 99999))
+	local count = 0
+	for _ in pairs(editorTabs) do count = count + 1 end
+	local title = customTitle or ("Script Tab " .. (count + 1))
+
+	local tabBtn = Instance.new("TextButton")
+	tabBtn.Name = "Tab_" .. tabId
+	tabBtn.Parent = EditorTabBar
+	tabBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+	tabBtn.BorderSizePixel = 0
+	tabBtn.Size = UDim2.new(0, 110, 1, 0)
+	tabBtn.Font = Enum.Font.Arcade
+	tabBtn.Text = title
+	tabBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+	tabBtn.TextSize = 12
+	tabBtn.ZIndex = 2
+	AddCorner(tabBtn, UDim.new(0, 6))
+
+	local closeTabBtn = Instance.new("TextButton")
+	closeTabBtn.Name = "Close"
+	closeTabBtn.Parent = tabBtn
+	closeTabBtn.BackgroundTransparency = 1
+	closeTabBtn.Position = UDim2.new(1, -16, 0.5, -8)
+	closeTabBtn.Size = UDim2.new(0, 16, 0, 16)
+	closeTabBtn.Font = Enum.Font.Arcade
+	closeTabBtn.Text = "×"
+	closeTabBtn.TextColor3 = Color3.fromRGB(200, 100, 100)
+	closeTabBtn.TextSize = 14
+	closeTabBtn.ZIndex = 2
+
+	editorTabs[tabId] = {
+		Button = tabBtn,
+		Content = initialContent or ""
+	}
+
+	tabBtn.MouseButton1Click:Connect(function()
+		SwitchEditorTab(tabId)
+	end)
+
+	closeTabBtn.MouseButton1Click:Connect(function()
+		local totalTabs = 0
+		for _ in pairs(editorTabs) do totalTabs = totalTabs + 1 end
+		if totalTabs <= 1 then return end
+		
+		if activeTabId == tabId then
+			for id, _ in pairs(editorTabs) do
+				if id ~= tabId then
+					SwitchEditorTab(id)
+					break
+				end
+			end
+		end
+		
+		editorTabs[tabId] = nil
+		tabBtn:Destroy()
+	end)
+
+	SwitchEditorTab(tabId)
+end
+
+local AddTabBtn = Instance.new("TextButton")
+AddTabBtn.Name = "AddTabBtn"
+AddTabBtn.Parent = EditorTabBar
+AddTabBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+AddTabBtn.BorderSizePixel = 0
+AddTabBtn.Size = UDim2.new(0, 26, 1, 0)
+AddTabBtn.Font = Enum.Font.Arcade
+AddTabBtn.Text = "+"
+AddTabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AddTabBtn.TextSize = 16
+AddTabBtn.ZIndex = 2
+AddCorner(AddTabBtn, UDim.new(0, 6))
+
+AddTabBtn.MouseButton1Click:Connect(function()
+	CreateNewEditorTab()
+end)
+
+CreateNewEditorTab("Script Tab 1", "")
+CreateNewEditorTab("Script Tab 2", "")
+
+ScriptBox:GetPropertyChangedSignal("Text"):Connect(function()
+	local text = ScriptBox.Text
+	if activeTabId and editorTabs[activeTabId] then
+		editorTabs[activeTabId].Content = text
+	end
+	
+	local count = 1
+	for _ in text:gmatch("\n") do
+		count = count + 1
+	end
+	
+	local linesStr = ""
+	for i = 1, count do
+		linesStr = linesStr .. i .. ".\n"
+	end
+	LineNumbers.Text = linesStr
+	
+	local calculatedHeight = math.max(1000, (count * 14) + 100)
+	EditorScroll.CanvasSize = UDim2.new(0, 1500, 0, calculatedHeight)
+	ScriptBox.Size = UDim2.new(0, 1460, 0, calculatedHeight)
+	LineNumbers.Size = UDim2.new(0, 35, 0, calculatedHeight)
+end)
+
+ExecuteCodeString = function(code, scriptName)
+	if code and code ~= "" then
+		local func, parseErr = loadstring(code)
+		if func then
+			local success, runErr = pcall(func)
+			if success then
+				ShowNotification("Successfully Executed\n" .. scriptName)
+			else
+				warn("Runtime Error: " .. tostring(runErr))
+			end
+		else
+			warn("Syntax Error: " .. tostring(parseErr))
+		end
+	end
+end
+
+local ExecuteCustomBtn = Instance.new("TextButton")
+ExecuteCustomBtn.Name = "ExecuteCustomBtn"
+ExecuteCustomBtn.Parent = EditorPage
+ExecuteCustomBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+ExecuteCustomBtn.BorderSizePixel = 0
+ExecuteCustomBtn.Position = UDim2.new(0.03, 0, 0.87, 0)
+ExecuteCustomBtn.Size = UDim2.new(0.38, 0, 0, 34)
+ExecuteCustomBtn.Font = Enum.Font.Arcade
+ExecuteCustomBtn.Text = "Execute"
+ExecuteCustomBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ExecuteCustomBtn.TextSize = 13
+ExecuteCustomBtn.ZIndex = 2
+AddCorner(ExecuteCustomBtn, UDim.new(0, 6))
+
+ExecuteCustomBtn.MouseButton1Click:Connect(function()
+	ExecuteCodeString(ScriptBox.Text, "Custom Editor Script")
+end)
+
+local CopyTextBtn = Instance.new("TextButton")
+CopyTextBtn.Name = "CopyTextBtn"
+CopyTextBtn.Parent = EditorPage
+CopyTextBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+CopyTextBtn.BorderSizePixel = 0
+CopyTextBtn.Position = UDim2.new(0.43, 0, 0.87, 0)
+CopyTextBtn.Size = UDim2.new(0.26, 0, 0, 34)
+CopyTextBtn.Font = Enum.Font.Arcade
+CopyTextBtn.Text = "Copy Text"
+CopyTextBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CopyTextBtn.TextSize = 13
+CopyTextBtn.ZIndex = 2
+AddCorner(CopyTextBtn, UDim.new(0, 6))
+
+CopyTextBtn.MouseButton1Click:Connect(function()
+	pcall(function()
+		if setclipboard then setclipboard(ScriptBox.Text) end
+		ShowNotification("Copied Editor Code to Clipboard!")
+	end)
+end)
+
+local ClearEditorBtn = Instance.new("TextButton")
+ClearEditorBtn.Name = "ClearEditorBtn"
+ClearEditorBtn.Parent = EditorPage
+ClearEditorBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+ClearEditorBtn.BorderSizePixel = 0
+ClearEditorBtn.Position = UDim2.new(0.71, 0, 0.87, 0)
+ClearEditorBtn.Size = UDim2.new(0.26, 0, 0, 34)
+ClearEditorBtn.Font = Enum.Font.Arcade
+ClearEditorBtn.Text = "Clear"
+ClearEditorBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ClearEditorBtn.TextSize = 13
+ClearEditorBtn.ZIndex = 2
+AddCorner(ClearEditorBtn, UDim.new(0, 6))
+
+ClearEditorBtn.MouseButton1Click:Connect(function()
+	ScriptBox.Text = ""
+end)
+
+-- SCRIPT FINDER PAGE
+local SearchBox = Instance.new("TextBox")
+SearchBox.Name = "SearchBox"
+SearchBox.Parent = FinderPage
+SearchBox.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+SearchBox.BorderSizePixel = 0
+SearchBox.Position = UDim2.new(0.03, 0, 0.03, 0)
+SearchBox.Size = UDim2.new(0.36, 0, 0, 30)
+SearchBox.Font = Enum.Font.Arcade
+SearchBox.PlaceholderText = "Search scripts..."
+SearchBox.Text = ""
+SearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+SearchBox.TextSize = 13
+SearchBox.ClearTextOnFocus = false
+SearchBox.ZIndex = 2
+AddCorner(SearchBox, UDim.new(0, 6))
+
+local FilterSelectBtn = Instance.new("TextButton")
+FilterSelectBtn.Name = "FilterSelectBtn"
+FilterSelectBtn.Parent = FinderPage
+FilterSelectBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+FilterSelectBtn.BorderSizePixel = 0
+FilterSelectBtn.Position = UDim2.new(0.40, 0, 0.03, 0)
+FilterSelectBtn.Size = UDim2.new(0.24, 0, 0, 30)
+FilterSelectBtn.Font = Enum.Font.Arcade
+FilterSelectBtn.Text = "Type: All ▾"
+FilterSelectBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+FilterSelectBtn.TextSize = 12
+FilterSelectBtn.ZIndex = 2
+AddCorner(FilterSelectBtn, UDim.new(0, 6))
+
+local FilterDropdownFrame = Instance.new("Frame")
+FilterDropdownFrame.Name = "FilterDropdownFrame"
+FilterDropdownFrame.Parent = FinderPage
+FilterDropdownFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+FilterDropdownFrame.BorderColor3 = Color3.fromRGB(70, 70, 70)
+FilterDropdownFrame.BorderSizePixel = 1
+FilterDropdownFrame.Position = UDim2.new(0.40, 0, 0.12, 0)
+FilterDropdownFrame.Size = UDim2.new(0.24, 0, 0, 80)
+FilterDropdownFrame.Visible = false
+FilterDropdownFrame.ZIndex = 4
+AddCorner(FilterDropdownFrame, UDim.new(0, 6))
+
+local FilterDropdownList = Instance.new("UIListLayout")
+FilterDropdownList.Parent = FilterDropdownFrame
+FilterDropdownList.SortOrder = Enum.SortOrder.LayoutOrder
+
+local currentFilterMode = "All"
+
+local function CreateFilterOption(name, text)
+	local optBtn = Instance.new("TextButton")
+	optBtn.Name = name
+	optBtn.Parent = FilterDropdownFrame
+	optBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	optBtn.BorderSizePixel = 0
+	optBtn.Size = UDim2.new(1, 0, 0, 26)
+	optBtn.Font = Enum.Font.Arcade
+	optBtn.Text = text
+	optBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+	optBtn.TextSize = 12
+	optBtn.ZIndex = 4
+
+	optBtn.MouseButton1Click:Connect(function()
+		currentFilterMode = name
+		FilterSelectBtn.Text = "Type: " .. text .. " ▾"
+		FilterDropdownFrame.Visible = false
+	end)
+end
+
+CreateFilterOption("All", "All Scripts")
+CreateFilterOption("Keyless", "🔓 Keyless")
+CreateFilterOption("Key", "🔑 Key Required")
+
+FilterSelectBtn.MouseButton1Click:Connect(function()
+	FilterDropdownFrame.Visible = not FilterDropdownFrame.Visible
+end)
+
+local InGameToggleBtn = Instance.new("TextButton")
+InGameToggleBtn.Name = "InGameToggleBtn"
+InGameToggleBtn.Parent = FinderPage
+InGameToggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+InGameToggleBtn.BorderSizePixel = 0
+InGameToggleBtn.Position = UDim2.new(0.65, 0, 0.03, 0)
+InGameToggleBtn.Size = UDim2.new(0.12, 0, 0, 30)
+InGameToggleBtn.Font = Enum.Font.Arcade
+InGameToggleBtn.Text = "Game"
+InGameToggleBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+InGameToggleBtn.TextSize = 12
+InGameToggleBtn.ZIndex = 2
+AddCorner(InGameToggleBtn, UDim.new(0, 6))
+
+local searchInGameActive = false
+InGameToggleBtn.MouseButton1Click:Connect(function()
+	searchInGameActive = not searchInGameActive
+	if searchInGameActive then
+		InGameToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		InGameToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		task.spawn(function()
+			pcall(function()
+				local success, info = pcall(function()
+					return MarketplaceService:GetProductInfo(game.PlaceId)
+				end)
+				if success and info and info.Name then
+					SearchBox.Text = info.Name
+				end
+			end)
+		end)
+	else
+		InGameToggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+		InGameToggleBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+		SearchBox.Text = ""
+	end
+end)
+
+local SearchBtn = Instance.new("TextButton")
+SearchBtn.Name = "SearchBtn"
+SearchBtn.Parent = FinderPage
+SearchBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+SearchBtn.BorderSizePixel = 0
+SearchBtn.Position = UDim2.new(0.78, 0, 0.03, 0)
+SearchBtn.Size = UDim2.new(0.19, 0, 0, 30)
+SearchBtn.Font = Enum.Font.Arcade
+SearchBtn.Text = "Search"
+SearchBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SearchBtn.TextSize = 13
+SearchBtn.ZIndex = 2
+AddCorner(SearchBtn, UDim.new(0, 6))
+
+local FinderScroll = Instance.new("ScrollingFrame")
+FinderScroll.Name = "FinderScroll"
+FinderScroll.Parent = FinderPage
+FinderScroll.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+FinderScroll.BorderSizePixel = 0
+FinderScroll.Position = UDim2.new(0.03, 0, 0.16, 0)
+FinderScroll.Size = UDim2.new(0.94, 0, 0.80, 0)
+FinderScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+FinderScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+FinderScroll.ScrollBarThickness = 6
+FinderScroll.ZIndex = 2
+AddCorner(FinderScroll, UDim.new(0, 6))
+
+local FinderListLayout = Instance.new("UIListLayout")
+FinderListLayout.Parent = FinderScroll
+FinderListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+FinderListLayout.Padding = UDim.new(0, 6)
+
+local function FetchScriptBlox(query)
+	for _, child in ipairs(FinderScroll:GetChildren()) do
+		if child:IsA("Frame") then child:Destroy() end
+	end
+	
+	if query == "" then return end
+	ShowNotification("Searching ScriptBlox...")
+
+	task.spawn(function()
+		local success, result = pcall(function()
+			local url = "https://scriptblox.com/api/script/search?q=" .. HttpService:UrlEncode(query) .. "&mode=free"
+			local response = game:HttpGet(url)
+			return HttpService:JSONDecode(response)
+		end)
+
+		if success and result and result.result and result.result.scripts then
+			local scripts = result.result.scripts
+			local addedCount = 0
+
+			for _, sData in ipairs(scripts) do
+				pcall(function()
+					local hasKey = (sData.isKey == true) or (sData.key == true) or (sData.keyURL and sData.keyURL ~= "")
+					local isPaid = (sData.isPaid == true) or (sData.paid == true)
+
+					if isPaid then return end
+
+					if currentFilterMode == "Keyless" and hasKey then return end
+					if currentFilterMode == "Key" and not hasKey then return end
+
+					addedCount = addedCount + 1
+					local sCard = Instance.new("Frame")
+					sCard.Parent = FinderScroll
+					sCard.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+					sCard.BorderSizePixel = 0
+					sCard.Size = UDim2.new(1, 0, 0, 85)
+					sCard.ZIndex = 2
+					AddCorner(sCard, UDim.new(0, 6))
+
+					local titleLbl = Instance.new("TextLabel")
+					titleLbl.Parent = sCard
+					titleLbl.BackgroundTransparency = 1
+					titleLbl.Position = UDim2.new(0.03, 0, 0.08, 0)
+					titleLbl.Size = UDim2.new(0.55, 0, 0, 22)
+					titleLbl.Font = Enum.Font.Arcade
+					titleLbl.Text = sData.title or "Untitled Script"
+					titleLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+					titleLbl.TextSize = 13
+					titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+					titleLbl.ZIndex = 2
+
+					local gameName = "Universal"
+					if sData.game and sData.game.name then
+						gameName = sData.game.name
+					end
+
+					local statusText = "🔓 Keyless"
+					local statusColor = Color3.fromRGB(80, 255, 120)
+					if hasKey then
+						statusText = "🔑 Key Required"
+						statusColor = Color3.fromRGB(255, 80, 80)
+					end
+					
+					local viewsCount = sData.views or 0
+					local viewsText = "👁️ " .. tostring(viewsCount) .. " views"
+
+					local subLbl = Instance.new("TextLabel")
+					subLbl.Parent = sCard
+					subLbl.BackgroundTransparency = 1
+					subLbl.Position = UDim2.new(0.03, 0, 0.38, 0)
+					subLbl.Size = UDim2.new(0.55, 0, 0, 20)
+					subLbl.Font = Enum.Font.Arcade
+					subLbl.Text = "Game: " .. gameName
+					subLbl.TextColor3 = Color3.fromRGB(170, 170, 170)
+					subLbl.TextSize = 11
+					subLbl.TextXAlignment = Enum.TextXAlignment.Left
+					subLbl.ZIndex = 2
+
+					local keyLbl = Instance.new("TextLabel")
+					keyLbl.Parent = sCard
+					keyLbl.BackgroundTransparency = 1
+					keyLbl.Position = UDim2.new(0.03, 0, 0.65, 0)
+					keyLbl.Size = UDim2.new(0.30, 0, 0, 20)
+					keyLbl.Font = Enum.Font.Arcade
+					keyLbl.Text = statusText
+					keyLbl.TextColor3 = statusColor
+					keyLbl.TextSize = 11
+					keyLbl.TextXAlignment = Enum.TextXAlignment.Left
+					keyLbl.ZIndex = 2
+
+					local viewsLbl = Instance.new("TextLabel")
+					viewsLbl.Parent = sCard
+					viewsLbl.BackgroundTransparency = 1
+					viewsLbl.Position = UDim2.new(0.33, 0, 0.65, 0)
+					viewsLbl.Size = UDim2.new(0.25, 0, 0, 20)
+					viewsLbl.Font = Enum.Font.Arcade
+					viewsLbl.Text = viewsText
+					viewsLbl.TextColor3 = Color3.fromRGB(170, 170, 170)
+					viewsLbl.TextSize = 11
+					viewsLbl.TextXAlignment = Enum.TextXAlignment.Left
+					viewsLbl.ZIndex = 2
+
+					local loadBtn = Instance.new("TextButton")
+					loadBtn.Parent = sCard
+					loadBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+					loadBtn.BorderSizePixel = 0
+					loadBtn.Position = UDim2.new(0.59, 0, 0.08, 0)
+					loadBtn.Size = UDim2.new(0.38, 0, 0, 21)
+					loadBtn.Font = Enum.Font.Arcade
+					loadBtn.Text = "Load to Editor"
+					loadBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+					loadBtn.TextSize = 11
+					loadBtn.ZIndex = 2
+					AddCorner(loadBtn, UDim.new(0, 4))
+
+					loadBtn.MouseButton1Click:Connect(function()
+						if sData.script then
+							CreateNewEditorTab(sData.title or "Script", sData.script)
+							SwitchTab("Editor")
+							ShowNotification("Loaded script into Editor!")
+						else
+							ShowNotification("Error: Script code empty.")
+						end
+					end)
+
+					local execBtn = Instance.new("TextButton")
+					execBtn.Parent = sCard
+					execBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+					execBtn.BorderSizePixel = 0
+					execBtn.Position = UDim2.new(0.59, 0, 0.38, 0)
+					execBtn.Size = UDim2.new(0.38, 0, 0, 21)
+					execBtn.Font = Enum.Font.Arcade
+					execBtn.Text = "Execute Script"
+					execBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+					execBtn.TextSize = 11
+					execBtn.ZIndex = 2
+					AddCorner(execBtn, UDim.new(0, 4))
+
+					execBtn.MouseButton1Click:Connect(function()
+						if sData.script then
+							ExecuteCodeString(sData.script, sData.title or "Script")
+						else
+							ShowNotification("Error: Script code empty.")
+						end
+					end)
+
+					local copyBtn = Instance.new("TextButton")
+					copyBtn.Parent = sCard
+					copyBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+					copyBtn.BorderSizePixel = 0
+					copyBtn.Position = UDim2.new(0.59, 0, 0.68, 0)
+					copyBtn.Size = UDim2.new(0.38, 0, 0, 21)
+					copyBtn.Font = Enum.Font.Arcade
+					copyBtn.Text = "Copy Loadstring"
+					copyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+					copyBtn.TextSize = 11
+					copyBtn.ZIndex = 2
+					AddCorner(copyBtn, UDim.new(0, 4))
+
+					copyBtn.MouseButton1Click:Connect(function()
+						pcall(function()
+							if sData.script and setclipboard then
+								setclipboard(sData.script)
+								ShowNotification("Copied script to clipboard!")
+							else
+								ShowNotification("Clipboard function not supported.")
+							end
+						end)
+					end)
+				end)
+			end
+			ShowNotification("Found " .. tostring(addedCount) .. " scripts matching filter!")
+		else
+			ShowNotification("Failed to fetch from ScriptBlox API.")
+		end
+	end)
+end
+
+SearchBtn.MouseButton1Click:Connect(function()
+	FetchScriptBlox(SearchBox.Text)
+end)
+
+SearchBox.FocusLost:Connect(function(enterPressed)
+	if enterPressed then
+		FetchScriptBlox(SearchBox.Text)
+	end
+end)
+
+-- CONSOLE & REMOTESPY PAGE
+local ConsoleContainer = Instance.new("Frame")
+ConsoleContainer.Name = "ConsoleContainer"
+ConsoleContainer.Parent = CombinedPage
+ConsoleContainer.BackgroundTransparency = 1
+ConsoleContainer.Position = UDim2.new(0.02, 0, 0.02, 0)
+ConsoleContainer.Size = UDim2.new(0.48, 0, 0.96, 0)
+ConsoleContainer.ZIndex = 2
+
+local ConsoleScroll = Instance.new("ScrollingFrame")
+ConsoleScroll.Name = "ConsoleScroll"
+ConsoleScroll.Parent = ConsoleContainer
+ConsoleScroll.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+ConsoleScroll.BorderSizePixel = 0
+ConsoleScroll.Position = UDim2.new(0, 0, 0, 0)
+ConsoleScroll.Size = UDim2.new(1, 0, 0.86, 0)
+ConsoleScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+ConsoleScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+ConsoleScroll.ScrollBarThickness = 4
+ConsoleScroll.ZIndex = 2
+AddCorner(ConsoleScroll, UDim.new(0, 6))
+
+local ConsoleListLayout = Instance.new("UIListLayout")
+ConsoleListLayout.Parent = ConsoleScroll
+ConsoleListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ConsoleListLayout.Padding = UDim.new(0, 4)
+
+local ClearConsoleBtn = Instance.new("TextButton")
+ClearConsoleBtn.Name = "ClearConsoleBtn"
+ClearConsoleBtn.Parent = ConsoleContainer
+ClearConsoleBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+ClearConsoleBtn.BorderSizePixel = 0
+ClearConsoleBtn.Position = UDim2.new(0, 0, 0.89, 0)
+ClearConsoleBtn.Size = UDim2.new(1, 0, 0, 32)
+ClearConsoleBtn.Font = Enum.Font.Arcade
+ClearConsoleBtn.Text = "Clear Console"
+ClearConsoleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ClearConsoleBtn.TextSize = 14
+ClearConsoleBtn.ZIndex = 2
+AddCorner(ClearConsoleBtn, UDim.new(0, 6))
+
+local SpyContainer = Instance.new("Frame")
+SpyContainer.Name = "SpyContainer"
+SpyContainer.Parent = CombinedPage
+SpyContainer.BackgroundTransparency = 1
+SpyContainer.Position = UDim2.new(0.52, 0, 0.02, 0)
+SpyContainer.Size = UDim2.new(0.48, 0, 0.96, 0)
+SpyContainer.ZIndex = 2
+
+local SpySearchBox = Instance.new("TextBox")
+SpySearchBox.Name = "SpySearchBox"
+SpySearchBox.Parent = SpyContainer
+SpySearchBox.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+SpySearchBox.BorderSizePixel = 0
+SpySearchBox.Position = UDim2.new(0, 0, 0, 0)
+SpySearchBox.Size = UDim2.new(1, 0, 0, 28)
+SpySearchBox.Font = Enum.Font.Arcade
+SpySearchBox.PlaceholderText = "Search remote name..."
+SpySearchBox.Text = ""
+SpySearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpySearchBox.TextSize = 13
+SpySearchBox.ClearTextOnFocus = false
+SpySearchBox.ZIndex = 2
+AddCorner(SpySearchBox, UDim.new(0, 6))
+
+local SpyScroll = Instance.new("ScrollingFrame")
+SpyScroll.Name = "SpyScroll"
+SpyScroll.Parent = SpyContainer
+SpyScroll.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+SpyScroll.BorderSizePixel = 0
+SpyScroll.Position = UDim2.new(0, 0, 0, 34)
+SpyScroll.Size = UDim2.new(1, 0, 0.72, 0)
+SpyScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+SpyScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+SpyScroll.ScrollBarThickness = 4
+SpyScroll.ZIndex = 2
+AddCorner(SpyScroll, UDim.new(0, 6))
+
+local SpyListLayout = Instance.new("UIListLayout")
+SpyListLayout.Parent = SpyScroll
+SpyListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+SpyListLayout.Padding = UDim.new(0, 4)
+
+local ClearSpyBtn = Instance.new("TextButton")
+ClearSpyBtn.Name = "ClearSpyBtn"
+ClearSpyBtn.Parent = SpyContainer
+ClearSpyBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+ClearSpyBtn.BorderSizePixel = 0
+ClearSpyBtn.Position = UDim2.new(0, 0, 0.89, 0)
+ClearSpyBtn.Size = UDim2.new(1, 0, 0, 32)
+ClearSpyBtn.Font = Enum.Font.Arcade
+ClearSpyBtn.Text = "Clear RemoteSpy"
+ClearSpyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ClearSpyBtn.TextSize = 14
+ClearSpyBtn.ZIndex = 2
+AddCorner(ClearSpyBtn, UDim.new(0, 6))
+
+-- + ADDRS PAGE
+local AddrsTitle = Instance.new("TextLabel")
+AddrsTitle.Parent = AddrsPage
+AddrsTitle.BackgroundTransparency = 1
+AddrsTitle.Position = UDim2.new(0.03, 0, 0.02, 0)
+AddrsTitle.Size = UDim2.new(0.94, 0, 0, 20)
+AddrsTitle.Font = Enum.Font.Arcade
+AddrsTitle.Text = "Custom Loadstring / Script Adder"
+AddrsTitle.TextColor3 = Color3.fromRGB(0, 170, 255)
+AddrsTitle.TextSize = 13
+AddrsTitle.TextXAlignment = Enum.TextXAlignment.Left
+AddrsTitle.ZIndex = 2
+
+local AddrsNameBox = Instance.new("TextBox")
+AddrsNameBox.Parent = AddrsPage
+AddrsNameBox.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+AddrsNameBox.BorderSizePixel = 0
+AddrsNameBox.Position = UDim2.new(0.03, 0, 0.10, 0)
+AddrsNameBox.Size = UDim2.new(0.94, 0, 0, 28)
+AddrsNameBox.Font = Enum.Font.Arcade
+AddrsNameBox.PlaceholderText = "Name: (Of your opinion e.g. My Script)"
+AddrsNameBox.Text = ""
+AddrsNameBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+AddrsNameBox.TextSize = 13
+AddrsNameBox.ClearTextOnFocus = false
+AddrsNameBox.ZIndex = 2
+AddCorner(AddrsNameBox, UDim.new(0, 6))
+
+local AddrsCodeBox = Instance.new("TextBox")
+AddrsCodeBox.Parent = AddrsPage
+AddrsCodeBox.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+AddrsCodeBox.BorderSizePixel = 0
+AddrsCodeBox.Position = UDim2.new(0.03, 0, 0.22, 0)
+AddrsCodeBox.Size = UDim2.new(0.94, 0, 0, 65)
+AddrsCodeBox.Font = Enum.Font.Arcade
+AddrsCodeBox.MultiLine = true
+AddrsCodeBox.ClearTextOnFocus = false
+AddrsCodeBox.PlaceholderText = 'loadstring(game:HttpGet(""))()'
+AddrsCodeBox.Text = ""
+AddrsCodeBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+AddrsCodeBox.TextSize = 12
+AddrsCodeBox.TextXAlignment = Enum.TextXAlignment.Left
+AddrsCodeBox.TextYAlignment = Enum.TextYAlignment.Top
+AddrsCodeBox.ZIndex = 2
+AddCorner(AddrsCodeBox, UDim.new(0, 6))
+
+local SaveAddrsBtn = Instance.new("TextButton")
+SaveAddrsBtn.Parent = AddrsPage
+SaveAddrsBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+SaveAddrsBtn.BorderSizePixel = 0
+SaveAddrsBtn.Position = UDim2.new(0.03, 0, 0.42, 0)
+SaveAddrsBtn.Size = UDim2.new(0.94, 0, 0, 28)
+SaveAddrsBtn.Font = Enum.Font.Arcade
+SaveAddrsBtn.Text = "Save & Add Loadstring to List"
+SaveAddrsBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SaveAddrsBtn.TextSize = 13
+SaveAddrsBtn.ZIndex = 2
+AddCorner(SaveAddrsBtn, UDim.new(0, 6))
+
+local AddrsScroll = Instance.new("ScrollingFrame")
+AddrsScroll.Parent = AddrsPage
+AddrsScroll.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+AddrsScroll.BorderSizePixel = 0
+AddrsScroll.Position = UDim2.new(0.03, 0, 0.54, 0)
+AddrsScroll.Size = UDim2.new(0.94, 0, 0.42, 0)
+AddrsScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+AddrsScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+AddrsScroll.ScrollBarThickness = 4
+AddrsScroll.ZIndex = 2
+AddCorner(AddrsScroll, UDim.new(0, 6))
+
+local AddrsListLayout = Instance.new("UIListLayout")
+AddrsListLayout.Parent = AddrsScroll
+AddrsListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+AddrsListLayout.Padding = UDim.new(0, 6)
+
+local function RenderAddedScriptCard(scriptName, scriptContent)
+	local card = Instance.new("Frame")
+	card.Parent = AddrsScroll
+	card.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+	card.BorderSizePixel = 0
+	card.Size = UDim2.new(1, 0, 0, 42)
+	card.ZIndex = 2
+	AddCorner(card, UDim.new(0, 6))
+
+	local lbl = Instance.new("TextLabel")
+	lbl.Parent = card
+	lbl.BackgroundTransparency = 1
+	lbl.Position = UDim2.new(0.03, 0, 0.15, 0)
+	lbl.Size = UDim2.new(0.5, 0, 0, 26)
+	lbl.Font = Enum.Font.Arcade
+	lbl.Text = scriptName
+	lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+	lbl.TextSize = 13
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.ZIndex = 2
+
+	local execCardBtn = Instance.new("TextButton")
+	execCardBtn.Parent = card
+	execCardBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+	execCardBtn.BorderSizePixel = 0
+	execCardBtn.Position = UDim2.new(0.53, 0, 0.15, 0)
+	execCardBtn.Size = UDim2.new(0.21, 0, 0, 26)
+	execCardBtn.Font = Enum.Font.Arcade
+	execCardBtn.Text = "Execute"
+	execCardBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	execCardBtn.TextSize = 12
+	execCardBtn.ZIndex = 2
+	AddCorner(execCardBtn, UDim.new(0, 4))
+
+	execCardBtn.MouseButton1Click:Connect(function()
+		ExecuteCodeString(scriptContent, scriptName)
+	end)
+
+	local delCardBtn = Instance.new("TextButton")
+	delCardBtn.Parent = card
+	delCardBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+	delCardBtn.BorderSizePixel = 0
+	delCardBtn.Position = UDim2.new(0.76, 0, 0.15, 0)
+	delCardBtn.Size = UDim2.new(0.21, 0, 0, 26)
+	delCardBtn.Font = Enum.Font.Arcade
+	delCardBtn.Text = "Delete"
+	delCardBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	delCardBtn.TextSize = 12
+	delCardBtn.ZIndex = 2
+	AddCorner(delCardBtn, UDim.new(0, 4))
+
+	delCardBtn.MouseButton1Click:Connect(function()
+		card:Destroy()
+		ShowNotification("Deleted script: " .. scriptName)
+	end)
+end
+
+SaveAddrsBtn.MouseButton1Click:Connect(function()
+	local nameVal = AddrsNameBox.Text
+	local codeVal = AddrsCodeBox.Text
+	if nameVal ~= "" and codeVal ~= "" then
+		RenderAddedScriptCard(nameVal, codeVal)
+		AddrsNameBox.Text = ""
+		AddrsCodeBox.Text = ""
+		ShowNotification("Saved Loadstring/Script Successfully!")
+	else
+		ShowNotification("Please fill in both Name and Code fields!")
+	end
+end)
+
+-- DEX PAGE
+local LaunchDexBtn = Instance.new("TextButton")
+LaunchDexBtn.Name = "LaunchDexBtn"
+LaunchDexBtn.Parent = DexPage
+LaunchDexBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+LaunchDexBtn.BorderSizePixel = 0
+LaunchDexBtn.Position = UDim2.new(0.1, 0, 0.15, 0)
+LaunchDexBtn.Size = UDim2.new(0.8, 0, 0, 38)
+LaunchDexBtn.Font = Enum.Font.Arcade
+LaunchDexBtn.Text = "Launch Dark Dex Explorer"
+LaunchDexBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+LaunchDexBtn.TextSize = 14
+LaunchDexBtn.ZIndex = 2
+AddCorner(LaunchDexBtn, UDim.new(0, 6))
+
+LaunchDexBtn.MouseButton1Click:Connect(function()
+	local success, err = pcall(function()
+		loadstring(game:HttpGet("https://github.com/FusionWTF/Dex-Explorer/releases/download/Beta/out.lua"))()
+	end)
+	if success then
+		ShowNotification("Dark Dex Loaded Successfully!")
+	else
+		ShowNotification("Failed to load Dark Dex")
+		warn(err)
+	end
+end)
+
+local LaunchDexPlusBtn = Instance.new("TextButton")
+LaunchDexPlusBtn.Name = "LaunchDexPlusBtn"
+LaunchDexPlusBtn.Parent = DexPage
+LaunchDexPlusBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+LaunchDexPlusBtn.BorderSizePixel = 0
+LaunchDexPlusBtn.Position = UDim2.new(0.1, 0, 0.35, 0)
+LaunchDexPlusBtn.Size = UDim2.new(0.8, 0, 0, 38)
+LaunchDexPlusBtn.Font = Enum.Font.Arcade
+LaunchDexPlusBtn.Text = "Launch Dex ++"
+LaunchDexPlusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+LaunchDexPlusBtn.TextSize = 14
+LaunchDexPlusBtn.ZIndex = 2
+AddCorner(LaunchDexPlusBtn, UDim.new(0, 6))
+
+LaunchDexPlusBtn.MouseButton1Click:Connect(function()
+	local success, err = pcall(function()
+		loadstring(game:HttpGet("https://rawscripts.net/raw/Universal-Script-Dex-PlusPlus-Decompiler-Fix-206651"))()
+	end)
+	if success then
+		ShowNotification("Dex ++ Loaded Successfully!")
+	else
+		ShowNotification("Failed to load Dex ++")
+		warn(err)
+	end
+end)
+
+local LaunchVexBtn = Instance.new("TextButton")
+LaunchVexBtn.Name = "LaunchVexBtn"
+LaunchVexBtn.Parent = DexPage
+LaunchVexBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+LaunchVexBtn.BorderSizePixel = 0
+LaunchVexBtn.Position = UDim2.new(0.1, 0, 0.55, 0)
+LaunchVexBtn.Size = UDim2.new(0.8, 0, 0, 38)
+LaunchVexBtn.Font = Enum.Font.Arcade
+LaunchVexBtn.Text = "Launch Vex Explorer"
+LaunchVexBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+LaunchVexBtn.TextSize = 14
+LaunchVexBtn.ZIndex = 2
+AddCorner(LaunchVexBtn, UDim.new(0, 6))
+
+LaunchVexBtn.MouseButton1Click:Connect(function()
+	local success, err = pcall(function()
+		loadstring(game:HttpGet("https://rawscripts.net/raw/Universal-Script-Vex-Explorer-The-best-dex-explorer-245058"))()
+	end)
+	if success then
+		ShowNotification("Vex Explorer Loaded Successfully!")
+	else
+		ShowNotification("Failed to load Vex Explorer")
+		warn(err)
+	end
+end)
+
+local DexInfoLabel = Instance.new("TextLabel")
+DexInfoLabel.Name = "DexInfoLabel"
+DexInfoLabel.Parent = DexPage
+DexInfoLabel.BackgroundTransparency = 1
+DexInfoLabel.Position = UDim2.new(0.1, 0, 0.72, 0)
+DexInfoLabel.Size = UDim2.new(0.8, 0, 0, 50)
+DexInfoLabel.Font = Enum.Font.Arcade
+DexInfoLabel.Text = "Click any button above to load and open the respective explorer/decompiler utility."
+DexInfoLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+DexInfoLabel.TextSize = 12
+DexInfoLabel.TextWrapped = true
+DexInfoLabel.ZIndex = 2
+
+-- SETTINGS PAGE
+local function CreateSettingSectionHeader(titleText)
+	local header = Instance.new("TextLabel")
+	header.Parent = SettingsPage
+	header.BackgroundTransparency = 1
+	header.Size = UDim2.new(0.9, 0, 0, 25)
+	header.Font = Enum.Font.Arcade
+	header.Text = titleText
+	header.TextColor3 = Color3.fromRGB(0, 170, 255)
+	header.TextSize = 14
+	header.TextXAlignment = Enum.TextXAlignment.Left
+	header.ZIndex = 2
+	return header
+end
+
+-- KEYBINDS SECTION
+CreateSettingSectionHeader("  Keybinds Configuration")
+
+local ToggleGuiKey = Enum.KeyCode.RightControl
+local KeybindBtn = Instance.new("TextButton")
+KeybindBtn.Parent = SettingsPage
+KeybindBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+KeybindBtn.BorderSizePixel = 0
+KeybindBtn.Size = UDim2.new(0.9, 0, 0, 36)
+KeybindBtn.Font = Enum.Font.Arcade
+KeybindBtn.Text = "Toggle GUI Keybind: RightControl"
+KeybindBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+KeybindBtn.TextSize = 13
+KeybindBtn.ZIndex = 2
+AddCorner(KeybindBtn, UDim.new(0, 6))
+
+local isBindingKey = false
+KeybindBtn.MouseButton1Click:Connect(function()
+	if isBindingKey then return end
+	isBindingKey = true
+	KeybindBtn.Text = "Press any key..."
+	KeybindBtn.TextColor3 = Color3.fromRGB(0, 170, 255)
+	
+	local connection
+	connection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if input.UserInputType == Enum.UserInputType.Keyboard then
+			ToggleGuiKey = input.KeyCode
+			KeybindBtn.Text = "Toggle GUI Keybind: " .. ToggleGuiKey.Name
+			KeybindBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+			ShowNotification("Keybind set to: " .. ToggleGuiKey.Name)
+			isBindingKey = false
+			connection:Disconnect()
+		end
+	end)
+end)
+
+-- ==========================================
+-- START POSITIONS SYSTEM (SETTINGS)
+-- ==========================================
+CreateSettingSectionHeader("  Start Positions (Teleport Manager)")
+
+local SpNameBox = Instance.new("TextBox")
+SpNameBox.Parent = SettingsPage
+SpNameBox.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+SpNameBox.BorderSizePixel = 0
+SpNameBox.Size = UDim2.new(0.9, 0, 0, 36)
+SpNameBox.Font = Enum.Font.Arcade
+SpNameBox.PlaceholderText = "Enter Start Position Name (e.g. Base, Spawn)..."
+SpNameBox.Text = ""
+SpNameBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpNameBox.TextSize = 13
+SpNameBox.ClearTextOnFocus = false
+SpNameBox.ZIndex = 2
+AddCorner(SpNameBox, UDim.new(0, 6))
+
+local SaveSpBtn = Instance.new("TextButton")
+SaveSpBtn.Parent = SettingsPage
+SaveSpBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+SaveSpBtn.BorderSizePixel = 0
+SaveSpBtn.Size = UDim2.new(0.9, 0, 0, 36)
+SaveSpBtn.Font = Enum.Font.Arcade
+SaveSpBtn.Text = "Save Current Position as Start Position"
+SaveSpBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SaveSpBtn.TextSize = 13
+SaveSpBtn.ZIndex = 2
+AddCorner(SaveSpBtn, UDim.new(0, 6))
+
+-- Scroll container for stacked start positions
+local SpScroll = Instance.new("ScrollingFrame")
+SpScroll.Parent = SettingsPage
+SpScroll.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+SpScroll.BorderSizePixel = 0
+SpScroll.Size = UDim2.new(0.9, 0, 0, 180)
+SpScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+SpScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+SpScroll.ScrollBarThickness = 4
+SpScroll.ZIndex = 2
+AddCorner(SpScroll, UDim.new(0, 6))
+
+local SpListLayout = Instance.new("UIListLayout")
+SpListLayout.Parent = SpScroll
+SpListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+SpListLayout.Padding = UDim.new(0, 6)
+SpListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+local function AddStartPosCard(posName, targetCFrame)
+	local card = Instance.new("Frame")
+	card.Parent = SpScroll
+	card.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+	card.BorderSizePixel = 0
+	card.Size = UDim2.new(0.95, 0, 0, 50)
+	card.ZIndex = 2
+	AddCorner(card, UDim.new(0, 6))
+
+	local titleLbl = Instance.new("TextLabel")
+	titleLbl.Parent = card
+	titleLbl.BackgroundTransparency = 1
+	titleLbl.Position = UDim2.new(0.03, 0, 0.1, 0)
+	titleLbl.Size = UDim2.new(0.55, 0, 0, 20)
+	titleLbl.Font = Enum.Font.Arcade
+	titleLbl.Text = posName
+	titleLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+	titleLbl.TextSize = 13
+	titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+	titleLbl.ZIndex = 2
+
+	local coordText = string.format("X:%.0f Y:%.0f Z:%.0f", targetCFrame.Position.X, targetCFrame.Position.Y, targetCFrame.Position.Z)
+	local coordLbl = Instance.new("TextLabel")
+	coordLbl.Parent = card
+	coordLbl.BackgroundTransparency = 1
+	coordLbl.Position = UDim2.new(0.03, 0, 0.5, 0)
+	coordLbl.Size = UDim2.new(0.55, 0, 0, 20)
+	coordLbl.Font = Enum.Font.Arcade
+	coordLbl.Text = coordText
+	coordLbl.TextColor3 = Color3.fromRGB(170, 170, 170)
+	coordLbl.TextSize = 11
+	coordLbl.TextXAlignment = Enum.TextXAlignment.Left
+	coordLbl.ZIndex = 2
+
+	local tpSpBtn = Instance.new("TextButton")
+	tpSpBtn.Parent = card
+	tpSpBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+	tpSpBtn.BorderSizePixel = 0
+	tpSpBtn.Position = UDim2.new(0.60, 0, 0.15, 0)
+	tpSpBtn.Size = UDim2.new(0.23, 0, 0, 34)
+	tpSpBtn.Font = Enum.Font.Arcade
+	tpSpBtn.Text = "Teleport"
+	tpSpBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	tpSpBtn.TextSize = 12
+	tpSpBtn.ZIndex = 2
+	AddCorner(tpSpBtn, UDim.new(0, 5))
+
+	tpSpBtn.MouseButton1Click:Connect(function()
+		pcall(function()
+			if Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
+				Player.Character.HumanoidRootPart.CFrame = targetCFrame
+				ShowNotification("Teleported to Start Position: " .. posName)
+			else
+				ShowNotification("Character root part missing!")
+			end
+		end)
+	end)
+
+	local delSpBtn = Instance.new("TextButton")
+	delSpBtn.Parent = card
+	delSpBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+	delSpBtn.BorderSizePixel = 0
+	delSpBtn.Position = UDim2.new(0.85, 0, 0.15, 0)
+	delSpBtn.Size = UDim2.new(0.12, 0, 0, 34)
+	delSpBtn.Font = Enum.Font.Arcade
+	delSpBtn.Text = "X"
+	delSpBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	delSpBtn.TextSize = 14
+	delSpBtn.ZIndex = 2
+	AddCorner(delSpBtn, UDim.new(0, 5))
+
+	delSpBtn.MouseButton1Click:Connect(function()
+		card:Destroy()
+		ShowNotification("Deleted position: " .. posName)
+	end)
+end
+
+SaveSpBtn.MouseButton1Click:Connect(function()
+	pcall(function()
+		local customName = SpNameBox.Text
+		if customName == "" then
+			customName = "Position " .. tostring(math.random(10, 99))
+		end
+		
+		if Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
+			local currentCFrame = Player.Character.HumanoidRootPart.CFrame
+			AddStartPosCard(customName, currentCFrame)
+			SpNameBox.Text = ""
+			ShowNotification("Saved Start Position: " .. customName)
+		else
+			ShowNotification("Cannot save position (Character not found)")
+		end
+	end)
+end)
+
+CreateSettingSectionHeader("  Exploit Utilities & Safety")
+
+-- ==========================================
+-- HIDE ALL PLAYERS TOGGLE
+-- ==========================================
+local HideAllPlayersBtn = Instance.new("TextButton")
+HideAllPlayersBtn.Parent = SettingsPage
+HideAllPlayersBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+HideAllPlayersBtn.BorderSizePixel = 0
+HideAllPlayersBtn.Size = UDim2.new(0.9, 0, 0, 36)
+HideAllPlayersBtn.Font = Enum.Font.Arcade
+HideAllPlayersBtn.Text = "Hide All Players: OFF"
+HideAllPlayersBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+HideAllPlayersBtn.TextSize = 13
+HideAllPlayersBtn.ZIndex = 2
+AddCorner(HideAllPlayersBtn, UDim.new(0, 6))
+
+local hideAllPlayersEnabled = false
+HideAllPlayersBtn.MouseButton1Click:Connect(function()
+	hideAllPlayersEnabled = not hideAllPlayersEnabled
+	if hideAllPlayersEnabled then
+		HideAllPlayersBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		HideAllPlayersBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		HideAllPlayersBtn.Text = "Hide All Players: ON"
+		ShowNotification("All Players Hidden!")
+	else
+		HideAllPlayersBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		HideAllPlayersBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+		HideAllPlayersBtn.Text = "Hide All Players: OFF"
+		-- Restore visibility
+		pcall(function()
+			for _, p in pairs(Players:GetPlayers()) do
+				if p ~= Player and p.Character then
+					for _, part in pairs(p.Character:GetDescendants()) do
+						if part:IsA("BasePart") or part:IsA("Decal") then
+							part.Transparency = (part.Name == "HumanoidRootPart") and 1 or 0
+						end
+					end
+				end
+			end
+		end)
+		ShowNotification("Players Restored")
+	end
+end)
+
+RunService.RenderStepped:Connect(function()
+	if hideAllPlayersEnabled then
+		pcall(function()
+			for _, p in pairs(Players:GetPlayers()) do
+				if p ~= Player and p.Character then
+					for _, part in pairs(p.Character:GetDescendants()) do
+						if part:IsA("BasePart") or part:IsA("Decal") then
+							part.Transparency = 1
+						end
+					end
+				end
+			end
+		end)
+	end
+end)
+
+-- 1. ANTI-FLING TOGGLE
+local AntiFlingBtn = Instance.new("TextButton")
+AntiFlingBtn.Parent = SettingsPage
+AntiFlingBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+AntiFlingBtn.BorderSizePixel = 0
+AntiFlingBtn.Size = UDim2.new(0.9, 0, 0, 36)
+AntiFlingBtn.Font = Enum.Font.Arcade
+AntiFlingBtn.Text = "Anti-Fling: OFF"
+AntiFlingBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+AntiFlingBtn.TextSize = 13
+AntiFlingBtn.ZIndex = 2
+AddCorner(AntiFlingBtn, UDim.new(0, 6))
+
+local antiFlingEnabled = false
+local antiFlingConnection
+
+AntiFlingBtn.MouseButton1Click:Connect(function()
+	antiFlingEnabled = not antiFlingEnabled
+	if antiFlingEnabled then
+		AntiFlingBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		AntiFlingBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		AntiFlingBtn.Text = "Anti-Fling: ON"
+		
+		antiFlingConnection = RunService.Stepped:Connect(function()
+			pcall(function()
+				if Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
+					for _, v in pairs(Players:GetPlayers()) do
+						if v ~= Player and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+							local rootPart = v.Character.HumanoidRootPart
+							if rootPart.AssemblyLinearVelocity.Magnitude > 100 or rootPart.AssemblyAngularVelocity.Magnitude > 100 then
+								rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+								rootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+								rootPart.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
+							end
+						end
+					end
+				end
+			end)
+		end)
+	else
+		AntiFlingBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		AntiFlingBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+		AntiFlingBtn.Text = "Anti-Fling: OFF"
+		if antiFlingConnection then
+			antiFlingConnection:Disconnect()
+			antiFlingConnection = nil
+		end
+	end
+end)
+
+-- 2. X-RAY TOGGLE (Settings)
+local XrayBtn = Instance.new("TextButton")
+XrayBtn.Parent = SettingsPage
+XrayBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+XrayBtn.BorderSizePixel = 0
+XrayBtn.Size = UDim2.new(0.9, 0, 0, 36)
+XrayBtn.Font = Enum.Font.Arcade
+XrayBtn.Text = "X-Ray: OFF"
+XrayBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+XrayBtn.TextSize = 13
+XrayBtn.ZIndex = 2
+AddCorner(XrayBtn, UDim.new(0, 6))
+
+local xrayEnabled = false
+local originalTransparencies = {}
+
+XrayBtn.MouseButton1Click:Connect(function()
+	xrayEnabled = not xrayEnabled
+	if xrayEnabled then
+		XrayBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		XrayBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		XrayBtn.Text = "X-Ray: ON"
+		
+		for _, obj in pairs(workspace:GetDescendants()) do
+			if obj:IsA("BasePart") and not obj:IsDescendantOf(Player.Character or workspace) then
+				originalTransparencies[obj] = obj.Transparency
+				if obj.Transparency < 0.5 then
+					obj.Transparency = 0.5
+				end
+			end
+		end
+		ShowNotification("X-Ray Enabled!")
+	else
+		XrayBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		XrayBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+		XrayBtn.Text = "X-Ray: OFF"
+		
+		for obj, trans in pairs(originalTransparencies) do
+			if obj and obj.Parent then
+				obj.Transparency = trans
+			end
+		end
+		originalTransparencies = {}
+		ShowNotification("X-Ray Disabled")
+	end
+end)
+
+-- 3. INFINITE ZOOM TOGGLE
+local InfZoomBtn = Instance.new("TextButton")
+InfZoomBtn.Parent = SettingsPage
+InfZoomBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+InfZoomBtn.BorderSizePixel = 0
+InfZoomBtn.Size = UDim2.new(0.9, 0, 0, 36)
+InfZoomBtn.Font = Enum.Font.Arcade
+InfZoomBtn.Text = "Infinite Zoom: OFF"
+InfZoomBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+InfZoomBtn.TextSize = 13
+InfZoomBtn.ZIndex = 2
+AddCorner(InfZoomBtn, UDim.new(0, 6))
+
+local infZoomEnabled = false
+local infZoomConnection
+
+InfZoomBtn.MouseButton1Click:Connect(function()
+	infZoomEnabled = not infZoomEnabled
+	if infZoomEnabled then
+		InfZoomBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		InfZoomBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		InfZoomBtn.Text = "Infinite Zoom: ON"
+		pcall(function() Player.CameraMaxZoomDistance = math.huge end)
+		infZoomConnection = RunService.RenderStepped:Connect(function()
+			pcall(function()
+				if Player.CameraMaxZoomDistance ~= math.huge then
+					Player.CameraMaxZoomDistance = math.huge
+				end
+			end)
+		end)
+	else
+		InfZoomBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		InfZoomBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+		InfZoomBtn.Text = "Infinite Zoom: OFF"
+		if infZoomConnection then
+			infZoomConnection:Disconnect()
+			infZoomConnection = nil
+		end
+		pcall(function() Player.CameraMaxZoomDistance = 400 end)
+	end
+end)
+
+-- 4. INSTANT PROXIMITY PROMPT
+local InstantPromptBtn = Instance.new("TextButton")
+InstantPromptBtn.Parent = SettingsPage
+InstantPromptBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+InstantPromptBtn.BorderSizePixel = 0
+InstantPromptBtn.Size = UDim2.new(0.9, 0, 0, 36)
+InstantPromptBtn.Font = Enum.Font.Arcade
+InstantPromptBtn.Text = "Instant Proximity Prompts: OFF"
+InstantPromptBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+InstantPromptBtn.TextSize = 13
+InstantPromptBtn.ZIndex = 2
+AddCorner(InstantPromptBtn, UDim.new(0, 6))
+
+local instantPromptEnabled = false
+local promptConnection
+
+InstantPromptBtn.MouseButton1Click:Connect(function()
+	instantPromptEnabled = not instantPromptEnabled
+	if instantPromptEnabled then
+		InstantPromptBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		InstantPromptBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		InstantPromptBtn.Text = "Instant Proximity Prompts: ON"
+		
+		for _, v in pairs(workspace:GetDescendants()) do
+			if v:IsA("ProximityPrompt") then
+				v.HoldDuration = 0
+			end
+		end
+		
+		promptConnection = ProximityPromptService.PromptAdded:Connect(function(prompt)
+			if instantPromptEnabled then
+				prompt.HoldDuration = 0
+			end
+		end)
+		ShowNotification("Instant Prompts Enabled!")
+	else
+		InstantPromptBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		InstantPromptBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+		InstantPromptBtn.Text = "Instant Proximity Prompts: OFF"
+		if promptConnection then
+			promptConnection:Disconnect()
+			promptConnection = nil
+		end
+		ShowNotification("Instant Prompts Disabled")
+	end
+end)
+
+-- 5. FULLBRIGHT
+local FullbrightBtn = Instance.new("TextButton")
+FullbrightBtn.Parent = SettingsPage
+FullbrightBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+FullbrightBtn.BorderSizePixel = 0
+FullbrightBtn.Size = UDim2.new(0.9, 0, 0, 36)
+FullbrightBtn.Font = Enum.Font.Arcade
+FullbrightBtn.Text = "Fullbright: OFF"
+FullbrightBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+FullbrightBtn.TextSize = 13
+FullbrightBtn.ZIndex = 2
+AddCorner(FullbrightBtn, UDim.new(0, 6))
+
+local fullbrightEnabled = false
+local originalBrightness = Lighting.Brightness
+local originalClockTime = Lighting.ClockTime
+local originalGlobalShadows = Lighting.GlobalShadows
+local originalOutdoorAmbient = Lighting.OutdoorAmbient
+
+FullbrightBtn.MouseButton1Click:Connect(function()
+	fullbrightEnabled = not fullbrightEnabled
+	if fullbrightEnabled then
+		FullbrightBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		FullbrightBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		FullbrightBtn.Text = "Fullbright: ON"
+		
+		originalBrightness = Lighting.Brightness
+		originalClockTime = Lighting.ClockTime
+		originalGlobalShadows = Lighting.GlobalShadows
+		originalOutdoorAmbient = Lighting.OutdoorAmbient
+		
+		Lighting.Brightness = 2
+		Lighting.ClockTime = 14
+		Lighting.GlobalShadows = false
+		Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+		ShowNotification("Fullbright Enabled!")
+	else
+		FullbrightBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		FullbrightBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+		FullbrightBtn.Text = "Fullbright: OFF"
+		
+		Lighting.Brightness = originalBrightness
+		Lighting.ClockTime = originalClockTime
+		Lighting.GlobalShadows = originalGlobalShadows
+		Lighting.OutdoorAmbient = originalOutdoorAmbient
+		ShowNotification("Fullbright Disabled")
+	end
+end)
+
+-- 6. DAY/NIGHT SUN CYCLE AUTOMATIC
+local SunCycleBtn = Instance.new("TextButton")
+SunCycleBtn.Parent = SettingsPage
+SunCycleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+SunCycleBtn.BorderSizePixel = 0
+SunCycleBtn.Size = UDim2.new(0.9, 0, 0, 36)
+SunCycleBtn.Font = Enum.Font.Arcade
+SunCycleBtn.Text = "Day/Night Sun Cycle: OFF"
+SunCycleBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+SunCycleBtn.TextSize = 13
+SunCycleBtn.ZIndex = 2
+AddCorner(SunCycleBtn, UDim.new(0, 6))
+
+local sunCycleEnabled = false
+SunCycleBtn.MouseButton1Click:Connect(function()
+	sunCycleEnabled = not sunCycleEnabled
+	if sunCycleEnabled then
+		SunCycleBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		SunCycleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		SunCycleBtn.Text = "Day/Night Sun Cycle: ON"
+		ShowNotification("Automatic Sun Cycle Enabled!")
+	else
+		SunCycleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		SunCycleBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+		SunCycleBtn.Text = "Day/Night Sun Cycle: OFF"
+		ShowNotification("Sun Cycle Disabled")
+	end
+end)
+
+RunService.RenderStepped:Connect(function(dt)
+	if sunCycleEnabled then
+		pcall(function()
+			Lighting.ClockTime = (Lighting.ClockTime + (dt * 0.5)) % 24
+		end)
+	end
+end)
+
+local AntiAfkBtn = Instance.new("TextButton")
+AntiAfkBtn.Parent = SettingsPage
+AntiAfkBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+AntiAfkBtn.BorderSizePixel = 0
+AntiAfkBtn.Size = UDim2.new(0.9, 0, 0, 36)
+AntiAfkBtn.Font = Enum.Font.Arcade
+AntiAfkBtn.Text = "Anti-AFK: OFF"
+AntiAfkBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+AntiAfkBtn.TextSize = 13
+AntiAfkBtn.ZIndex = 2
+AddCorner(AntiAfkBtn, UDim.new(0, 6))
+
+local vu = game:GetService("VirtualUser")
+Player.Idled:Connect(function()
+	if antiAfkEnabled then
+		pcall(function()
+			vu:Button2Down(Vector2.new(0,0), Camera.CFrame)
+			task.wait(1)
+			vu:Button2Up(Vector2.new(0,0), Camera.CFrame)
+		end)
+	end
+end)
+
+AntiAfkBtn.MouseButton1Click:Connect(function()
+	antiAfkEnabled = not antiAfkEnabled
+	if antiAfkEnabled then
+		AntiAfkBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+		AntiAfkBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		AntiAfkBtn.Text = "Anti-AFK: ON"
+		pcall(function()
+			for _, v in pairs(getconnections(Player.Idled)) do
+				v:Disable()
+			end
+		end)
+	else
+		AntiAfkBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		AntiAfkBtn.TextColor3 = Color3.fromRGB(170, 170, 170)
+		AntiAfkBtn.Text = "Anti-AFK: OFF"
+	end
+end)
+
+local FpsCapBtn = Instance.new("TextButton")
+FpsCapBtn.Parent = SettingsPage
+FpsCapBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+FpsCapBtn.BorderSizePixel = 0
+FpsCapBtn.Size = UDim2.new(0.9, 0, 0, 36)
+FpsCapBtn.Font = Enum.Font.Arcade
+FpsCapBtn.Text = "FPS Cap: Unlimited"
+FpsCapBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+FpsCapBtn.TextSize = 13
+FpsCapBtn.ZIndex = 2
+AddCorner(FpsCapBtn, UDim.new(0, 6))
+
+local fpsModes = {"Unlimited", "30 FPS", "60 FPS", "120 FPS", "144 FPS", "200 FPS", "240 FPS", "300 FPS", "400 FPS", "500 FPS", "600 FPS", "700 FPS", "800 FPS", "900 FPS", "1000 FPS"}
+local fpsIndex = 1
+FpsCapBtn.MouseButton1Click:Connect(function()
+	fpsIndex = fpsIndex % #fpsModes + 1
+	local mode = fpsModes[fpsIndex]
+	FpsCapBtn.Text = "FPS Cap: " .. mode
+	pcall(function()
+		if setfpscap then
+			if mode == "Unlimited" then setfpscap(9999)
+			elseif mode == "30 FPS" then setfpscap(30)
+			elseif mode == "60 FPS" then setfpscap(60)
+			elseif mode == "120 FPS" then setfpscap(120)
+			elseif mode == "144 FPS" then setfpscap(144)
+			elseif mode == "200 FPS" then setfpscap(200)
+			elseif mode == "240 FPS" then setfpscap(240)
+			elseif mode == "300 FPS" then setfpscap(300)
+			elseif mode == "400 FPS" then setfpscap(400)
+			elseif mode == "500 FPS" then setfpscap(500)
+			elseif mode == "600 FPS" then setfpscap(600)
+			elseif mode == "700 FPS" then setfpscap(700)
+			elseif mode == "800 FPS" then setfpscap(800)
+			elseif mode == "900 FPS" then setfpscap(900)
+			elseif mode == "1000 FPS" then setfpscap(1000)
+			end
+		end
+	end)
+end)
+
+CreateSettingSectionHeader("  Interface Customization")
+local ThemeBtn = Instance.new("TextButton")
+ThemeBtn.Parent = SettingsPage
+ThemeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+ThemeBtn.BorderSizePixel = 0
+ThemeBtn.Size = UDim2.new(0.9, 0, 0, 36)
+ThemeBtn.Font = Enum.Font.Arcade
+ThemeBtn.Text = "Theme: Dark Gray (Default)"
+ThemeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ThemeBtn.TextSize = 13
+ThemeBtn.ZIndex = 2
+AddCorner(ThemeBtn, UDim.new(0, 6))
+
+local themes = {
+	{Name = "Dark Gray", Main = Color3.fromRGB(30, 30, 30), Top = Color3.fromRGB(45, 45, 45)},
+	{Name = "Midnight Blue", Main = Color3.fromRGB(15, 20, 35), Top = Color3.fromRGB(25, 35, 55)},
+	{Name = "Pitch Black", Main = Color3.fromRGB(10, 10, 10), Top = Color3.fromRGB(20, 20, 20)},
+	{Name = "Crimson Red", Main = Color3.fromRGB(35, 15, 15), Top = Color3.fromRGB(55, 25, 25)},
+}
+local themeIndex = 1
+
+ThemeBtn.MouseButton1Click:Connect(function()
+	themeIndex = themeIndex % #themes + 1
+	local t = themes[themeIndex]
+	ThemeBtn.Text = "Theme: " .. t.Name
+	MainFrame.BackgroundColor3 = t.Main
+	TopBar.BackgroundColor3 = t.Top
+end)
+
+CreateSettingSectionHeader("  Interface Scaling (0.50x - 1.00x)")
+
+local ScaleContainer = Instance.new("Frame")
+ScaleContainer.Parent = SettingsPage
+ScaleContainer.BackgroundTransparency = 1
+ScaleContainer.Size = UDim2.new(0.9, 0, 0, 36)
+ScaleContainer.ZIndex = 2
+
+local DecScaleBtn = Instance.new("TextButton")
+DecScaleBtn.Parent = ScaleContainer
+DecScaleBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+DecScaleBtn.BorderSizePixel = 0
+DecScaleBtn.Size = UDim2.new(0, 45, 1, 0)
+DecScaleBtn.Font = Enum.Font.Arcade
+DecScaleBtn.Text = "-"
+DecScaleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+DecScaleBtn.TextSize = 18
+DecScaleBtn.ZIndex = 2
+AddCorner(DecScaleBtn, UDim.new(0, 6))
+
+local ScaleDisplayBtn = Instance.new("TextButton")
+ScaleDisplayBtn.Parent = ScaleContainer
+ScaleDisplayBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+ScaleDisplayBtn.BorderSizePixel = 0
+ScaleDisplayBtn.Position = UDim2.new(0, 52, 0, 0)
+ScaleDisplayBtn.Size = UDim2.new(1, -104, 1, 0)
+ScaleDisplayBtn.Font = Enum.Font.Arcade
+ScaleDisplayBtn.Text = "UI Scale: 1.00x"
+ScaleDisplayBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ScaleDisplayBtn.TextSize = 13
+ScaleDisplayBtn.ZIndex = 2
+AddCorner(ScaleDisplayBtn, UDim.new(0, 6))
+
+local IncScaleBtn = Instance.new("TextButton")
+IncScaleBtn.Parent = ScaleContainer
+IncScaleBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 200)
+IncScaleBtn.BorderSizePixel = 0
+IncScaleBtn.Position = UDim2.new(1, -45, 0, 0)
+IncScaleBtn.Size = UDim2.new(0, 45, 1, 0)
+IncScaleBtn.Font = Enum.Font.Arcade
+IncScaleBtn.Text = "+"
+IncScaleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+IncScaleBtn.TextSize = 18
+IncScaleBtn.ZIndex = 2
+AddCorner(IncScaleBtn, UDim.new(0, 6))
+
+local currentScale = 1.00
+local function UpdateScale(newScale)
+	currentScale = math.clamp(math.floor((newScale + 0.005) * 100) / 100, 0.50, 1.00)
+	MainUIScale.Scale = currentScale
+	ScaleDisplayBtn.Text = string.format("UI Scale: %.2fx", currentScale)
+end
+
+DecScaleBtn.MouseButton1Click:Connect(function() UpdateScale(currentScale - 0.10) end)
+IncScaleBtn.MouseButton1Click:Connect(function() UpdateScale(currentScale + 0.10) end)
+ScaleDisplayBtn.MouseButton1Click:Connect(function() UpdateScale(1.00) end)
+
+-- REAL-TIME MILLISECOND FPS COUNTER
+CreateSettingSectionHeader("  Real-time Millisecond FPS Counter")
+
+local FpsCounterDisplay = Instance.new("TextButton")
+FpsCounterDisplay.Parent = SettingsPage
+FpsCounterDisplay.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+FpsCounterDisplay.BorderSizePixel = 0
+FpsCounterDisplay.Size = UDim2.new(0.9, 0, 0, 40)
+FpsCounterDisplay.Font = Enum.Font.Arcade
+FpsCounterDisplay.Text = "FPS: 60 (16.67ms)"
+FpsCounterDisplay.TextColor3 = Color3.fromRGB(80, 255, 120)
+FpsCounterDisplay.TextSize = 13
+FpsCounterDisplay.ZIndex = 2
+AddCorner(FpsCounterDisplay, UDim.new(0, 6))
+
+RunService.RenderStepped:Connect(function(dt)
+	pcall(function()
+		if dt > 0 then
+			local fps = math.floor(1 / dt)
+			local ms = math.floor((dt * 1000) * 100 + 0.5) / 100
+			FpsCounterDisplay.Text = string.format("FPS: %d | Frame Time: %.2f ms", fps, ms)
+			
+			if fps >= 60 then
+				FpsCounterDisplay.TextColor3 = Color3.fromRGB(80, 255, 120)
+			elseif fps >= 30 then
+				FpsCounterDisplay.TextColor3 = Color3.fromRGB(255, 220, 50)
+			else
+				FpsCounterDisplay.TextColor3 = Color3.fromRGB(255, 80, 80)
+			end
+		end
+	end)
+end)
+
+-- Console Output Logging
+LogService.MessageOut:Connect(function(message, messageType)
+	pcall(function()
+		local logRow = Instance.new("Frame")
+		logRow.Parent = ConsoleScroll
+		logRow.BackgroundTransparency = 1
+		logRow.Size = UDim2.new(1, 0, 0, 22)
+		logRow.AutomaticSize = Enum.AutomaticSize.Y
+		logRow.ZIndex = 2
+
+		local logLabel = Instance.new("TextLabel")
+		logLabel.Parent = logRow
+		logLabel.BackgroundTransparency = 1
+		logLabel.Position = UDim2.new(0, 0, 0, 0)
+		logLabel.Size = UDim2.new(1, -55, 1, 0)
+		logLabel.Font = Enum.Font.Arcade
+		logLabel.TextSize = 12
+		logLabel.TextXAlignment = Enum.TextXAlignment.Left
+		logLabel.TextWrapped = true
+		logLabel.AutomaticSize = Enum.AutomaticSize.Y
+		logLabel.Text = message
+		logLabel.ZIndex = 2
+
+		if messageType == Enum.MessageType.MessageOutput then
+			logLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+		elseif messageType == Enum.MessageType.MessageWarning then
+			logLabel.TextColor3 = Color3.fromRGB(255, 220, 50)
+		elseif messageType == Enum.MessageType.MessageError then
+			logLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+		elseif messageType == Enum.MessageType.MessageInfo then
+			logLabel.TextColor3 = Color3.fromRGB(80, 180, 255)
+		else
+			logLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+		end
+
+		local copyLogBtn = Instance.new("TextButton")
+		copyLogBtn.Parent = logRow
+		copyLogBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		copyLogBtn.BorderSizePixel = 0
+		copyLogBtn.Position = UDim2.new(1, -50, 0, 2)
+		copyLogBtn.Size = UDim2.new(0, 48, 0, 18)
+		copyLogBtn.Font = Enum.Font.Arcade
+		copyLogBtn.Text = "Copy"
+		copyLogBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		copyLogBtn.TextSize = 11
+		copyLogBtn.ZIndex = 2
+		AddCorner(copyLogBtn, UDim.new(0, 4))
+
+		copyLogBtn.MouseButton1Click:Connect(function()
+			pcall(function()
+				if setclipboard then
+					setclipboard(message)
+					ShowNotification("Copied log message to clipboard!")
+				end
+			end)
+		end)
+
+		ConsoleScroll.CanvasPosition = Vector2.new(0, ConsoleScroll.AbsoluteCanvasSize.Y)
+	end)
+end)
+
+ClearConsoleBtn.MouseButton1Click:Connect(function()
+	for _, child in ipairs(ConsoleScroll:GetChildren()) do
+		if child:IsA("Frame") then child:Destroy() end
+	end
+end)
+
+-- Tab Switching Logic Definition
+SwitchTab = function(activeTab)
+	HubsPage.Visible = (activeTab == "Hubs")
+	UniversalPage.Visible = (activeTab == "Universal")
+	PlayersPage.Visible = (activeTab == "Players")
+	EditorPage.Visible = (activeTab == "Editor")
+	FinderPage.Visible = (activeTab == "Finder")
+	CombinedPage.Visible = (activeTab == "Combined")
+	AddrsPage.Visible = (activeTab == "Addrs")
+	DexPage.Visible = (activeTab == "Dex")
+	SettingsPage.Visible = (activeTab == "Settings")
+
+	local function updateTabStyle(btn, isActive)
+		btn.BackgroundColor3 = isActive and Color3.fromRGB(50, 50, 50) or Color3.fromRGB(30, 30, 30)
+		btn.TextColor3 = isActive and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(170, 170, 170)
+	end
+
+	updateTabStyle(HubsTabBtn, activeTab == "Hubs")
+	updateTabStyle(UniversalTabBtn, activeTab == "Universal")
+	updateTabStyle(PlayersTabBtn, activeTab == "Players")
+	updateTabStyle(EditorTabBtn, activeTab == "Editor")
+	updateTabStyle(FinderTabBtn, activeTab == "Finder")
+	updateTabStyle(CombinedTabBtn, activeTab == "Combined")
+	updateTabStyle(AddrsTabBtn, activeTab == "Addrs")
+	updateTabStyle(DexTabBtn, activeTab == "Dex")
+	updateTabStyle(SettingsTabBtn, activeTab == "Settings")
+end
+
+HubsTabBtn.MouseButton1Click:Connect(function() SwitchTab("Hubs") end)
+UniversalTabBtn.MouseButton1Click:Connect(function() SwitchTab("Universal") end)
+PlayersTabBtn.MouseButton1Click:Connect(function() SwitchTab("Players") BuildPlayerList() end)
+EditorTabBtn.MouseButton1Click:Connect(function() SwitchTab("Editor") end)
+FinderTabBtn.MouseButton1Click:Connect(function() SwitchTab("Finder") end)
+CombinedTabBtn.MouseButton1Click:Connect(function() SwitchTab("Combined") end)
+AddrsTabBtn.MouseButton1Click:Connect(function() SwitchTab("Addrs") end)
+DexTabBtn.MouseButton1Click:Connect(function() SwitchTab("Dex") end)
+SettingsTabBtn.MouseButton1Click:Connect(function() SwitchTab("Settings") end)
+
+-- Hubs Executions
+WaveBtn.MouseButton1Click:Connect(function()
+	local success, err = pcall(function()
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/littlebillyfrancisgamer-beep/Test/refs/heads/main/Test"))()
+	end)
+	if success then ShowNotification("Successfully Executed\nWave Executor") else warn(err) end
+end)
+
+AimbotBtn.MouseButton1Click:Connect(function()
+	local success, err = pcall(function()
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/littlebillyfrancisgamer-beep/Test-2/refs/heads/main/Test%202"))()
+	end)
+	if success then ShowNotification("Successfully Executed\nAimbot X Hub") else warn(err) end
+end)
+
+FlingerBtn.MouseButton1Click:Connect(function()
+	local success, err = pcall(function()
+		loadstring(game:HttpGet("https://rawscripts.net/raw/Universal-Script-K-A-I-O-D-By-Askeradaman-(femboy_c00lkidd)-229729"))()
+	end)
+	if success then ShowNotification("Successfully Executed\nFlinger Hub") else warn(err) end
+end)
+
+RidePetBtn.MouseButton1Click:Connect(function()
+	local success, err = pcall(function()
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/littlebillyfrancisgamer-beep/Test-3/refs/heads/main/Test%203"))()
+	end)
+	if success then ShowNotification("Successfully Executed\nRide a Pet script") else warn(err) end
+end)
+
+RejoinBtn.MouseButton1Click:Connect(function()
+	ShowNotification("Rejoining Server...")
+	task.delay(0.5, function()
+		pcall(function()
+			if #Players:GetPlayers() <= 1 then
+				Players.LocalPlayer:Kick("\nRejoining...")
+				task.wait(1)
+				TeleportService:Teleport(game.PlaceId, Players.LocalPlayer)
+			else
+				TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, Players.LocalPlayer)
+			end
+		end)
+	end)
+end)
+
+LeaveBtn.MouseButton1Click:Connect(function()
+	Players.LocalPlayer:Kick("Left the game via Custom Executor.")
+end)
+
+-- Open/Close UI logic
+local isOpen = true
+local function ToggleGUI()
+	isOpen = not isOpen
+	if isOpen then
+		MainFrame.Visible = true
+		Backdrop.Visible = true
+		Backdrop.Active = false
+		MainFrame.Size = UDim2.new(0, 420, 0, 330)
+		MainFrame.BackgroundTransparency = 1
+		Backdrop.BackgroundTransparency = 1
+		
+		TweenService:Create(Backdrop, TweenInfo.new(0.3), {BackgroundTransparency = 0.4}):Play()
+		local tweenOpen = TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Size = UDim2.new(0, 520, 0, 390),
+			BackgroundTransparency = 0
+		})
+		tweenOpen:Play()
+	else
+		Backdrop.Active = false
+		TweenService:Create(Backdrop, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
+		local tweenClose = TweenService:Create(MainFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Size = UDim2.new(0, 420, 0, 330),
+			BackgroundTransparency = 1
+		})
+		tweenClose:Play()
+		tweenClose.Completed:Connect(function()
+			if not isOpen then 
+				MainFrame.Visible = false 
+				Backdrop.Visible = false
+			end
+		end)
+	end
+end
+
+CloseBtn.MouseButton1Click:Connect(ToggleGUI)
+ToggleButton.MouseButton1Click:Connect(ToggleGUI)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if not gameProcessed and input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == ToggleGuiKey and not isBindingKey then
+		ToggleGUI()
+	end
+end)
+
+BuildPlayerList()
+
+-- ==========================================
+-- 10-SECOND LOADING SCREEN SEQUENCE HANDLER
+-- ==========================================
+task.spawn(function()
+	local totalDuration = 10
+	local elapsed = 0
+	
+	while elapsed < totalDuration do
+		local dt = RunService.RenderStepped:Wait()
+		elapsed = elapsed + dt
+		local progress = math.clamp(elapsed / totalDuration, 0, 1)
+		
+		BarFill.Size = UDim2.new(progress, 0, 1, 0)
+		PercentLabel.Text = math.floor(progress * 100) .. "%"
+	end
+	
+	local fadeInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local t1 = TweenService:Create(LoadingFrame, fadeInfo, {BackgroundTransparency = 1})
+	t1:Play()
+	for _, child in ipairs(LoadingFrame:GetDescendants()) do
+		if child:IsA("TextLabel") then
+			TweenService:Create(child, fadeInfo, {TextTransparency = 1}):Play()
+		elseif child:IsA("Frame") then
+			TweenService:Create(child, fadeInfo, {BackgroundTransparency = 1}):Play()
+		end
+	end
+	
+	task.wait(0.5)
+	LoadingFrame:Destroy()
+	
+	Backdrop.Visible = true
+	MainFrame.Visible = true
+	ToggleButton.Visible = true
+	
+	TriggerGlobalChat()
+	ShowNotification("Hazem Executor Loaded Successfully!")
+end)
